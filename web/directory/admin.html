@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Inbox</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="admin-page">
+    <header class="topbar">
+      <div class="brand">
+        <a class="brand-home" href="./embed.html" aria-label="Back to directory">
+          <img class="brand-logo" src="./assets/new-roots-logo.png" alt="New Roots Albania" />
+        </a>
+        <h1>Admin Inbox</h1>
+      </div>
+      <div class="actions compact">
+        <a class="chip link-chip" href="./embed.html">Directory</a>
+        <button id="adminLogout" type="button">Logout</button>
+      </div>
+    </header>
+
+    <main class="layout admin-layout">
+      <section class="card admin-sidebar">
+        <h2>Folders</h2>
+        <div id="adminCategories" class="list small"></div>
+      </section>
+
+      <section class="card admin-list">
+        <div class="row between center">
+          <h2>Tasks</h2>
+          <span id="adminTierPill" class="chip">Tier: -</span>
+        </div>
+        <div class="row gap-sm">
+          <input id="adminSearch" type="text" placeholder="Search requests..." />
+          <select id="adminStatusFilter">
+            <option value="all">All statuses</option>
+            <option value="submitted">Submitted</option>
+            <option value="under_review">Under review</option>
+            <option value="resolved">Resolved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+        <div id="adminTaskList" class="list small"></div>
+      </section>
+
+      <section class="card admin-detail">
+        <h2>Task Detail</h2>
+        <div id="adminDetail" class="muted">Select a task to view details.</div>
+        <div id="adminActions" class="actions"></div>
+      </section>
+    </main>
+
+    <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>
+    <script type="module" src="./admin.js"></script>
+  </body>
+</html>

@@ -60,6 +60,64 @@ const openImageLightbox = (url) => {
 
 const closeImageLightbox = () => $('imageLightbox').classList.add('hidden');
 
+const initProfileTabs = () => {
+  const tabHost = $('profileTabs');
+  if (!tabHost) return;
+  const tabs = Array.from(tabHost.querySelectorAll('.tab-btn[data-target]'));
+  const sections = tabs
+    .map((tab) => document.getElementById(tab.dataset.target))
+    .filter(Boolean);
+  if (!tabs.length || !sections.length) return;
+
+  const setActive = (id) => {
+    tabs.forEach((tab) => {
+      const isActive = tab.dataset.target === id;
+      tab.classList.toggle('active', isActive);
+      tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+  };
+
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const target = document.getElementById(tab.dataset.target);
+      if (!target) return;
+      const topbar = document.querySelector('.topbar');
+      const tabsCard = document.querySelector('.profile-tabs-card');
+      const offset = (topbar?.offsetHeight || 0) + (tabsCard?.offsetHeight || 0) + 12;
+      const top = window.scrollY + target.getBoundingClientRect().top - offset;
+      window.scrollTo({ top, behavior: 'smooth' });
+      history.replaceState(null, '', `#${target.id}`);
+      setActive(target.id);
+    });
+  });
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+      if (!visible.length) return;
+      setActive(visible[0].target.id);
+    },
+    {
+      root: null,
+      rootMargin: '-130px 0px -55% 0px',
+      threshold: [0.15, 0.25, 0.5]
+    }
+  );
+
+  sections.forEach((section) => observer.observe(section));
+  const hashId = window.location.hash?.replace('#', '');
+  if (hashId && sections.some((section) => section.id === hashId)) {
+    setActive(hashId);
+    window.setTimeout(() => {
+      document.getElementById(hashId)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }, 120);
+  } else {
+    setActive(sections[0].id);
+  }
+};
+
 const mapUrlFor = (loc) => {
   const q = encodeURIComponent(`${loc.address_line}, ${loc.city}, ${loc.country}`);
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
@@ -231,6 +289,48 @@ $('claimForm').addEventListener('submit', async (e) => {
   }
 });
 
+$('locationRequestForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!state.token) {
+    showToast('err', 'Login first to submit location request.');
+    return;
+  }
+
+  const address = $('reqLocationAddress').value.trim();
+  const city = $('reqLocationCity').value.trim();
+  const country = $('reqLocationCountry').value.trim();
+  if (!address || !city || !country) {
+    showToast('err', 'Address, city, and country are required.');
+    return;
+  }
+
+  const details = {
+    location_name: $('reqLocationName').value.trim() || null,
+    address_line: address,
+    city,
+    region: $('reqLocationRegion').value.trim() || null,
+    country
+  };
+
+  try {
+    await req('/appeals', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        target_type: 'business',
+        target_business_id: businessId,
+        reason: 'location_add_request',
+        details: `Pending location verification request: ${JSON.stringify(details)}`
+      })
+    });
+    showToast('ok', 'Location request submitted for verification.');
+    $('locationRequestForm').reset();
+    $('reqLocationCountry').value = 'Albania';
+  } catch (err) {
+    showToast('err', errMsg(err));
+  }
+});
+
 $('reviewsPrev').addEventListener('click', async () => {
   state.page = Math.max(1, state.page - 1);
   try { await loadReviews(); } catch (err) { showToast('err', errMsg(err)); }
@@ -250,6 +350,7 @@ document.addEventListener('click', (e) => {
 
 (async () => {
   applyTheme();
+  initProfileTabs();
   if (!businessId) {
     $('bizHeaderMeta').textContent = 'Missing businessId in URL.';
     return;

@@ -8,9 +8,9 @@
   </head>
   <body class="embed-mode">
     <header class="topbar compact-header">
-      <div class="brand">
-        <img class="brand-logo" src="./assets/new-roots-logo.png" alt="New Roots Albania" />
-        <h1>New Roots Albania Reviews</h1>
+      <div class="actions compact">
+        <a id="adminInboxLink" class="chip link-chip hidden" href="./admin.html">Admin Inbox</a>
+        <button id="openAuthModal" type="button">Login / Sign up</button>
       </div>
       <div class="api-base-wrap admin-only hidden">
         <input id="apiBase" type="text" value="" placeholder="https://your-api-host/v1" />
@@ -20,17 +20,23 @@
 
     <main class="layout">
       <section class="card directory-card">
-        <div class="row between center">
-          <h2>Businesses</h2>
-          <div class="actions compact">
-            <button id="loadBusinesses" type="button">Refresh</button>
-          </div>
+        <div class="directory-hero">
+          <a class="brand-home directory-brand" href="./embed.html" aria-label="Back to directory">
+            <img class="brand-logo" src="./assets/new-roots-logo.png" alt="New Roots Albania" />
+            <h1>New Roots Albania Reviews</h1>
+          </a>
         </div>
-        <div class="row gap-sm">
-          <input id="businessSearch" type="text" placeholder="Search business name..." />
+        <div class="row gap-sm search-center">
+          <input id="businessSearch" type="text" placeholder="Search business name..." list="businessSuggestions" autocomplete="off" />
+          <datalist id="businessSuggestions"></datalist>
         </div>
-        <div id="categoryChips" class="chips"></div>
-        <div id="businessesList" class="list"></div>
+        <div class="search-options">
+          <div class="muted">Or browse by category</div>
+          <div id="categoryChips" class="chips"></div>
+          <div class="muted">Or browse A-Z</div>
+          <div id="alphaChips" class="chips alpha-chips"></div>
+        </div>
+        <div id="businessesList" class="list"><div class="muted">Start typing to search businesses.</div></div>
         <div class="business-pager row between center">
           <button id="businessPrev" type="button">Previous</button>
           <span id="businessPageInfo" class="muted">Page 1</span>
@@ -38,7 +44,7 @@
         </div>
       </section>
 
-      <section class="card business-card">
+      <section class="card business-card hidden">
         <h2>Business</h2>
         <div id="businessDetail" class="muted">Pick a business.</div>
         <div id="businessMedia" class="media-grid"></div>
@@ -46,7 +52,7 @@
         <div id="locationsList" class="list small"></div>
       </section>
 
-      <section class="card location-card">
+      <section class="card location-card hidden">
         <h2>Location Reviews</h2>
         <div id="selectedLocationMeta" class="muted">No location selected.</div>
         <div id="locationScores" class="chips"></div>
@@ -78,16 +84,27 @@
         </div>
       </section>
 
-      <section class="card auth-card">
-        <h2>Leave a Review</h2>
+      <section class="card auth-card hidden">
+        <h2>Auth + Review (Hidden)</h2>
         <form id="loginForm" class="grid2">
           <input id="email" type="email" placeholder="Email" required />
           <input id="password" type="password" placeholder="Password" required />
           <button type="submit">Login</button>
         </form>
+        <form id="signupForm" class="grid2">
+          <input id="signupFirstName" type="text" placeholder="First name" />
+          <input id="signupLastName" type="text" placeholder="Last name" />
+          <input id="signupCountry" type="text" placeholder="Country of origin" />
+          <input id="signupAge" type="number" min="18" max="120" placeholder="Age (18+)" />
+          <input id="signupScreenName" type="text" placeholder="Screen name (optional)" />
+          <input id="signupEmail" type="email" placeholder="Email" />
+          <input id="signupPassword" type="password" placeholder="Password (8+ chars)" />
+          <button type="submit">Sign up</button>
+        </form>
         <div class="actions">
           <button id="acceptPolicies" type="button">Accept Policies</button>
           <button id="logout" type="button">Logout</button>
+          <button id="loadMe" type="button">Load Profile</button>
         </div>
         <div id="factorSliders" class="factor-grid"></div>
         <form id="ratingForm" class="grid2">
@@ -101,13 +118,9 @@
 
       <section class="card tools-card hidden">
         <button id="loadMine" type="button"></button>
-        <form id="createBusinessForm"></form>
         <form id="updateBusinessForm"></form>
         <form id="createLocationForm"></form>
         <form id="appealForm"></form>
-        <input id="bizName" />
-        <input id="bizOwnerName" />
-        <input id="bizDescription" />
         <input id="editBizName" />
         <input id="editBizDescription" />
         <input id="locName" />
@@ -120,6 +133,23 @@
         <form id="businessImageForm"></form>
         <input id="businessImages" type="file" />
         <pre id="toolsOut" class="out"></pre>
+      </section>
+
+      <section id="addBusinessCard" class="card add-business-card hidden">
+        <h2>Add a Business</h2>
+        <p class="muted">Visible only when logged in. New submissions are reviewed before wider verification workflows.</p>
+        <form id="createBusinessForm" class="grid2">
+          <input id="bizName" placeholder="Business name (required)" required />
+          <input id="bizOwnerName" placeholder="Owner name (required)" required />
+          <input id="bizDescription" placeholder="Description (required)" required />
+          <input id="bizPrimaryPhone" placeholder="Primary phone" />
+          <input id="bizWebsite" placeholder="Website URL" />
+          <input id="bizLocationName" placeholder="First location name" />
+          <input id="bizLocationAddress" placeholder="First location address (required)" required />
+          <input id="bizLocationCity" placeholder="First location city (required)" required />
+          <input id="bizLocationCountry" placeholder="First location country (required)" value="Albania" required />
+          <button type="submit">Submit Business</button>
+        </form>
       </section>
 
       <section class="card theme-card admin-only hidden">
@@ -135,6 +165,34 @@
         </div>
       </section>
     </main>
+
+    <div id="authModal" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Login and sign up">
+      <div class="overlay-card">
+        <div class="row between center">
+          <h2>Account Access</h2>
+          <button id="authModalClose" type="button">Close</button>
+        </div>
+        <div class="grid2" style="margin-top: 0.7rem;">
+          <form id="modalLoginForm" class="grid2">
+            <h3>Login</h3>
+            <input id="modalEmail" type="email" placeholder="Email" required />
+            <input id="modalPassword" type="password" placeholder="Password" required />
+            <button type="submit">Login</button>
+          </form>
+          <form id="modalSignupForm" class="grid2">
+            <h3>Sign up</h3>
+            <input id="modalSignupFirstName" type="text" placeholder="First name" required />
+            <input id="modalSignupLastName" type="text" placeholder="Last name" required />
+            <input id="modalSignupCountry" type="text" placeholder="Country of origin" required />
+            <input id="modalSignupAge" type="number" min="18" max="120" placeholder="Age (18+)" required />
+            <input id="modalSignupScreenName" type="text" placeholder="Screen name (optional)" />
+            <input id="modalSignupEmail" type="email" placeholder="Email" required />
+            <input id="modalSignupPassword" type="password" placeholder="Password (8+ chars)" required />
+            <button type="submit">Sign up</button>
+          </form>
+        </div>
+      </div>
+    </div>
 
     <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>
 

@@ -9,7 +9,9 @@
   <body class="business-page">
     <header class="topbar">
       <div class="brand">
-        <img class="brand-logo" src="./assets/new-roots-logo.png" alt="New Roots Albania" />
+        <a class="brand-home" href="./embed.html" aria-label="Back to directory">
+          <img class="brand-logo" src="./assets/new-roots-logo.png" alt="New Roots Albania" />
+        </a>
         <h1 id="bizPageTitle">Business</h1>
       </div>
       <div class="actions">
@@ -23,11 +25,19 @@
         <div id="bizGallery" class="media-grid hero-grid"></div>
       </section>
 
-      <section class="card profile-left">
+      <section class="card profile-tabs-card">
+        <nav id="profileTabs" class="profile-tabs" role="tablist" aria-label="Business profile sections">
+          <button type="button" class="tab-btn active" data-target="section-overview" role="tab" aria-selected="true">Overview</button>
+          <button type="button" class="tab-btn" data-target="section-hours" role="tab" aria-selected="false">Hours</button>
+          <button type="button" class="tab-btn" data-target="section-location" role="tab" aria-selected="false">Location</button>
+          <button type="button" class="tab-btn" data-target="section-reviews" role="tab" aria-selected="false">Reviews</button>
+        </nav>
+      </section>
+
+      <section id="section-overview" class="card profile-left section-anchor">
         <h2>Business Info</h2>
         <div id="bizInfo"></div>
         <div id="bizLinks" class="chips"></div>
-        <div id="bizLocations" class="list small"></div>
       </section>
 
       <section class="card profile-right">
@@ -36,6 +46,16 @@
         <form id="claimForm" class="grid2">
           <input id="claimMessage" type="text" placeholder="Explain ownership proof and contact details" />
           <button type="submit">Request Claim</button>
+        </form>
+        <h3>Request New Location (Pending Verification)</h3>
+        <p class="muted">Business accounts can submit a location request for admin verification.</p>
+        <form id="locationRequestForm" class="grid2">
+          <input id="reqLocationName" type="text" placeholder="Location name" />
+          <input id="reqLocationAddress" type="text" placeholder="Address line" />
+          <input id="reqLocationCity" type="text" placeholder="City" />
+          <input id="reqLocationRegion" type="text" placeholder="Region" />
+          <input id="reqLocationCountry" type="text" placeholder="Country" value="Albania" />
+          <button type="submit">Submit Location Request</button>
         </form>
         <h3>Account</h3>
         <form id="loginForm" class="grid2">
@@ -48,14 +68,21 @@
         </div>
       </section>
 
-      <section class="card profile-full">
+      <section id="section-hours" class="card profile-left section-anchor">
+        <h2>Hours</h2>
+        <div id="bizHours" class="list small"></div>
+      </section>
+
+      <section id="section-location" class="card profile-left section-anchor">
+        <h2>Location</h2>
+        <div id="bizLocations" class="list small"></div>
+      </section>
+
+      <section id="section-reviews" class="card profile-full section-anchor">
         <h2>Ratings Overview</h2>
         <div id="ratingSummary" class="chips"></div>
         <div id="ratingDistribution" class="chips"></div>
-      </section>
-
-      <section class="card profile-full">
-        <h2>Reviews</h2>
+        <h2 style="margin-top:0.9rem;">Reviews</h2>
         <div class="review-pager row between center">
           <button id="reviewsPrev" type="button">Previous</button>
           <span id="reviewsPageInfo" class="muted">Page 1</span>

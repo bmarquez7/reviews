@@ -12,6 +12,7 @@ const FACTORS = [
 
 const THEME_DEFAULTS = { brand: '#0f6a4d', bg: '#f5f2eb', card: '#fffdf7', iconUrl: './assets/new-roots-logo.png' };
 const PROD_API_BASE = "https://grow-albania-directory-api.onrender.com/v1";
+const isEmbedMode = document.body.classList.contains('embed-mode');
 
 const resolveInitialApiBase = () => {
   const saved = localStorage.getItem('dir.apiBase');
@@ -40,6 +41,8 @@ const state = {
   businessPageSize: 24,
   businessTotal: 0,
   businessSearchDebounce: null,
+  suggestionDebounce: null,
+  alphaFilter: null,
   reviewSort: "newest",
   reviewFilter: "all",
   reviewPage: 1,
@@ -76,18 +79,29 @@ const setAdminUIVisible = (isVisible) => {
   });
 };
 
+const setLoggedInUI = (isLoggedIn) => {
+  const addBusinessCard = $('addBusinessCard');
+  if (addBusinessCard) addBusinessCard.classList.toggle('hidden', !isLoggedIn);
+  const authBtn = $('openAuthModal');
+  if (authBtn) authBtn.textContent = isLoggedIn ? 'Account' : 'Login / Sign up';
+};
+
 const syncAdminUI = async () => {
   if (!state.token) {
     setAdminUIVisible(false);
+    $('adminInboxLink')?.classList.add('hidden');
     return;
   }
 
   try {
     const me = await req('/users/me', { headers: authHeaders() });
     const isAdmin = me?.data?.role === 'admin';
+    const canOpenInbox = me?.data?.role === 'admin' || me?.data?.role === 'moderator';
     setAdminUIVisible(isAdmin);
+    $('adminInboxLink')?.classList.toggle('hidden', !canOpenInbox);
   } catch {
     setAdminUIVisible(false);
+    $('adminInboxLink')?.classList.add('hidden');
   }
 };
 
@@ -121,6 +135,8 @@ const ensureOverlays = () => {
 const closeBusinessModal = () => $('businessModal')?.classList.add('hidden');
 const openBusinessModal = () => $('businessModal')?.classList.remove('hidden');
 const closeImageLightbox = () => $('imageLightbox')?.classList.add('hidden');
+const closeAuthModal = () => $('authModal')?.classList.add('hidden');
+const openAuthModal = () => $('authModal')?.classList.remove('hidden');
 const openImageLightbox = (url) => {
   const img = $('imageLightboxImg');
   if (!img || !url) return;
@@ -218,7 +234,27 @@ const renderCategoryChips = () => {
     : '<span class="muted">Load categories to display chips.</span>';
 };
 
+const renderAlphaChips = () => {
+  const host = $('alphaChips');
+  if (!host) return;
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  host.innerHTML = [
+    `<button type="button" class="chip ${state.alphaFilter ? '' : 'active'}" data-alpha="all">All</button>`,
+    ...letters.map((letter) => `<button type="button" class="chip ${state.alphaFilter === letter ? 'active' : ''}" data-alpha="${letter}">${letter}</button>`)
+  ].join('');
+};
+
 const renderBusinesses = () => {
+  const search = $('businessSearch')?.value.trim() || '';
+  const canBrowse = !!search || !!state.selectedCategoryId || !!state.alphaFilter || !isEmbedMode;
+  if (!canBrowse) {
+    $('businessesList').innerHTML = '<div class="muted">Start typing to search businesses.</div>';
+    $('businessPageInfo').textContent = 'Search to view businesses';
+    $('businessPrev').disabled = true;
+    $('businessNext').disabled = true;
+    return;
+  }
+
   $('businessesList').innerHTML = !state.businesses.length
     ? '<div class="muted">No businesses found.</div>'
     : state.businesses.map((b) => `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${b.id}"><div class="item-title">${b.name}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${b.scores?.weighted_overall_display ?? 'n/a'} / 5</span></div><div class="item-sub">Reviews: ${b.scores?.business_rating_count ?? 0}</div><div class="item-sub">Locations: ${b.locations_count ?? 0}</div></article>`).join('');
@@ -403,17 +439,48 @@ const renderReviews = (comments = []) => {
 const loadCategories = async () => { const data = await req('/categories'); state.categories = data.data || []; renderCategoryChips(); };
 const loadBusinesses = async () => {
   const search = $('businessSearch').value.trim();
+  const canBrowse = !!search || !!state.selectedCategoryId || !!state.alphaFilter || !isEmbedMode;
+  if (!canBrowse) {
+    state.businesses = [];
+    state.businessTotal = 0;
+    renderBusinesses();
+    return;
+  }
   const params = new URLSearchParams({
     page: String(state.businessPage),
     page_size: String(state.businessPageSize),
     sort: 'name'
   });
   if (search) params.set('q', search);
+  else if (state.alphaFilter) params.set('q', state.alphaFilter);
   if (state.selectedCategoryId) params.set('category', state.selectedCategoryId);
   const data = await req(`/businesses?${params.toString()}`);
   state.businesses = data?.data?.items || [];
+  if (state.alphaFilter && !search) {
+    state.businesses = state.businesses.filter((b) =>
+      (b.name || '').trim().toUpperCase().startsWith(state.alphaFilter)
+    );
+  }
   state.businessTotal = Number(data?.data?.total || 0);
   renderBusinesses();
+};
+
+const loadSearchSuggestions = async () => {
+  const input = $('businessSearch');
+  const host = $('businessSuggestions');
+  if (!input || !host) return;
+  const q = input.value.trim();
+  if (q.length < 2) {
+    host.innerHTML = '';
+    return;
+  }
+  try {
+    const data = await req(`/businesses?page=1&page_size=8&sort=name&q=${encodeURIComponent(q)}`);
+    const names = (data?.data?.items || []).map((b) => b.name).filter(Boolean);
+    host.innerHTML = names.map((name) => `<option value="${name}"></option>`).join('');
+  } catch {
+    host.innerHTML = '';
+  }
 };
 
 const loadBusinessDetail = async (businessId) => {
@@ -443,6 +510,24 @@ const requireLogin = () => {
   if (state.token) return true;
   showToast('err', 'Please login first for this action.');
   return false;
+};
+
+const doLogin = async (email, password) => {
+  const data = await req('/auth/login', { method: 'POST', body: JSON.stringify({ email: email.trim(), password }) });
+  state.token = data.data.access_token;
+  localStorage.setItem('dir.token', state.token);
+  await syncAdminUI();
+  setLoggedInUI(true);
+  setOut('authOut', data);
+  showToast('ok', 'Logged in');
+  return data;
+};
+
+const doSignup = async (payload) => {
+  const data = await req('/auth/signup', { method: 'POST', body: JSON.stringify(payload) });
+  setOut('authOut', data);
+  showToast('ok', 'Sign up complete. Verify your email, then login.');
+  return data;
 };
 
 $('saveApiBase').addEventListener('click', () => { state.apiBase = $('apiBase').value.trim(); localStorage.setItem('dir.apiBase', state.apiBase); showToast('ok', 'API base saved'); });
@@ -507,19 +592,68 @@ $('factorSliders').addEventListener('keydown', (e) => {
 $('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
-    const data = await req('/auth/login', { method: 'POST', body: JSON.stringify({ email: $('email').value.trim(), password: $('password').value }) });
-    state.token = data.data.access_token;
-    localStorage.setItem('dir.token', state.token);
-    await syncAdminUI();
-    setOut('authOut', data);
-    showToast('ok', 'Logged in');
+    await doLogin($('email').value, $('password').value);
   } catch (err) { setOut('authOut', err); showToast('err', errMsg(err)); }
 });
+
+const signupForm = $('signupForm');
+if (signupForm) {
+  signupForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await doSignup({
+        email: $('signupEmail').value.trim(),
+        password: $('signupPassword').value,
+        first_name: $('signupFirstName').value.trim(),
+        last_name: $('signupLastName').value.trim(),
+        country_of_origin: $('signupCountry').value.trim(),
+        age: Number($('signupAge').value),
+        screen_name: $('signupScreenName').value.trim() || undefined
+      });
+    } catch (err) { setOut('authOut', err); showToast('err', errMsg(err)); }
+  });
+}
+
+const modalLoginForm = $('modalLoginForm');
+if (modalLoginForm) {
+  modalLoginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await doLogin($('modalEmail').value, $('modalPassword').value);
+      closeAuthModal();
+    } catch (err) {
+      setOut('authOut', err);
+      showToast('err', errMsg(err));
+    }
+  });
+}
+
+const modalSignupForm = $('modalSignupForm');
+if (modalSignupForm) {
+  modalSignupForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await doSignup({
+        email: $('modalSignupEmail').value.trim(),
+        password: $('modalSignupPassword').value,
+        first_name: $('modalSignupFirstName').value.trim(),
+        last_name: $('modalSignupLastName').value.trim(),
+        country_of_origin: $('modalSignupCountry').value.trim(),
+        age: Number($('modalSignupAge').value),
+        screen_name: $('modalSignupScreenName').value.trim() || undefined
+      });
+    } catch (err) {
+      setOut('authOut', err);
+      showToast('err', errMsg(err));
+    }
+  });
+}
 
 $('logout').addEventListener('click', () => {
   state.token = '';
   localStorage.removeItem('dir.token');
   setAdminUIVisible(false);
+  setLoggedInUI(false);
   setOut('authOut', 'Logged out');
   showToast('ok', 'Logged out');
 });
@@ -543,9 +677,33 @@ $('acceptPolicies').addEventListener('click', async () => {
 });
 
 $('loadCategories').addEventListener('click', async () => { try { await loadCategories(); showToast('ok', 'Categories loaded'); } catch (err) { showToast('err', errMsg(err)); } });
-$('loadBusinesses').addEventListener('click', async () => { try { state.businessPage = 1; await loadBusinesses(); showToast('ok', 'Businesses refreshed'); } catch (err) { showToast('err', errMsg(err)); } });
+const loadBusinessesBtn = $('loadBusinesses');
+if (loadBusinessesBtn) {
+  loadBusinessesBtn.addEventListener('click', async () => {
+    try {
+      state.businessPage = 1;
+      await loadBusinesses();
+      showToast('ok', 'Businesses refreshed');
+    } catch (err) {
+      showToast('err', errMsg(err));
+    }
+  });
+}
 $('businessSearch').addEventListener('input', () => {
+  if (state.suggestionDebounce) clearTimeout(state.suggestionDebounce);
+  state.suggestionDebounce = setTimeout(() => {
+    loadSearchSuggestions().catch(() => {});
+  }, 180);
+
   if (state.businessSearchDebounce) clearTimeout(state.businessSearchDebounce);
+  const search = $('businessSearch').value.trim();
+  const canBrowse = !!search || !!state.selectedCategoryId || !!state.alphaFilter || !isEmbedMode;
+  if (!canBrowse) {
+    state.businesses = [];
+    state.businessTotal = 0;
+    renderBusinesses();
+    return;
+  }
   state.businessSearchDebounce = setTimeout(async () => {
     try {
       state.businessPage = 1;
@@ -553,7 +711,17 @@ $('businessSearch').addEventListener('input', () => {
     } catch (err) {
       showToast('err', errMsg(err));
     }
-  }, 250);
+  }, 180);
+});
+$('businessSearch').addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  try {
+    state.businessPage = 1;
+    await loadBusinesses();
+  } catch (err) {
+    showToast('err', errMsg(err));
+  }
 });
 $('categoryChips').addEventListener('click', async (e) => {
   const chip = e.target.closest('[data-category-id]');
@@ -568,6 +736,21 @@ $('categoryChips').addEventListener('click', async (e) => {
     showToast('err', errMsg(err));
   }
 });
+const alphaHost = $('alphaChips');
+if (alphaHost) {
+  alphaHost.addEventListener('click', async (e) => {
+    const chip = e.target.closest('[data-alpha]');
+    if (!chip) return;
+    state.alphaFilter = chip.dataset.alpha === 'all' ? null : chip.dataset.alpha;
+    state.businessPage = 1;
+    renderAlphaChips();
+    try {
+      await loadBusinesses();
+    } catch (err) {
+      showToast('err', errMsg(err));
+    }
+  });
+}
 $('businessPrev').addEventListener('click', async () => {
   state.businessPage = Math.max(1, state.businessPage - 1);
   try {
@@ -622,6 +805,19 @@ $('locationsList').addEventListener('click', async (e) => {
 });
 
 document.addEventListener('click', async (e) => {
+  if (e.target.id === 'openAuthModal') {
+    if (state.token && isEmbedMode) {
+      const addBusinessCard = $('addBusinessCard');
+      if (addBusinessCard) addBusinessCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    openAuthModal();
+    return;
+  }
+  if (e.target.id === 'authModalClose' || e.target.id === 'authModal') {
+    closeAuthModal();
+    return;
+  }
   const closeBiz = e.target.closest('#businessModalClose');
   if (closeBiz) {
     closeBusinessModal();
@@ -699,10 +895,35 @@ $('createBusinessForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
     if (!requireLogin()) return;
-    const body = { name: $('bizName').value.trim(), owner_name: $('bizOwnerName').value.trim(), description: $('bizDescription').value.trim() || undefined };
+    const body = {
+      name: $('bizName').value.trim(),
+      owner_name: $('bizOwnerName').value.trim(),
+      description: $('bizDescription').value.trim() || undefined,
+      primary_phone: $('bizPrimaryPhone')?.value.trim() || undefined,
+      website_url: $('bizWebsite')?.value.trim() || undefined
+    };
     const data = await req('/businesses', { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
     setOut('toolsOut', data); showToast('ok', 'Business created');
-    await loadBusinesses(); await loadBusinessDetail(data.data.id);
+    const firstLocationAddress = $('bizLocationAddress')?.value.trim();
+    const firstLocationCity = $('bizLocationCity')?.value.trim();
+    const firstLocationCountry = $('bizLocationCountry')?.value.trim();
+    if (firstLocationAddress && firstLocationCity && firstLocationCountry) {
+      await req(`/businesses/${data.data.id}/locations`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          location_name: $('bizLocationName')?.value.trim() || undefined,
+          address_line: firstLocationAddress,
+          city: firstLocationCity,
+          country: firstLocationCountry
+        })
+      });
+      showToast('ok', 'First location added');
+    }
+    if (!$('businessSearch').value.trim()) $('businessSearch').value = body.name;
+    state.businessPage = 1;
+    await loadBusinesses();
+    await loadBusinessDetail(data.data.id);
   } catch (err) { setOut('toolsOut', err); showToast('err', errMsg(err)); }
 });
 
@@ -774,6 +995,9 @@ $('businessImageForm').addEventListener('submit', async (e) => {
   ensureOverlays();
   loadTheme();
   await syncAdminUI();
+  setLoggedInUI(Boolean(state.token));
   renderSliders();
-  try { await Promise.all([loadCategories(), loadBusinesses()]); } catch {}
+  renderAlphaChips();
+  try { await loadCategories(); } catch {}
+  renderBusinesses();
 })();

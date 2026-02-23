@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { ApiError } from '../lib/http-errors.js';
 import { requireRole } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabase.js';
+import { env } from '../lib/env.js';
+import { BUSINESS_MEDIA_BUCKET, REVIEW_MEDIA_BUCKET } from '../lib/media.js';
 
 const moderationParamsSchema = z.object({
   type: z.enum(['rating', 'comment', 'business_reply']),
@@ -23,13 +25,190 @@ const statusPatchSchema = z.object({
   admin_decision_notes: z.string().optional()
 });
 
+const adminInboxQuerySchema = z.object({
+  category: z
+    .enum(['all', 'business_requests', 'claim_requests', 'location_requests', 'moderation'])
+    .default('all'),
+  status: z.enum(['all', 'submitted', 'under_review', 'resolved', 'rejected']).default('all'),
+  q: z.string().optional()
+});
+
+const requestInfoSchema = z.object({
+  note: z.string().min(3)
+});
+
+const removeBusinessParamsSchema = z.object({
+  businessId: z.string().uuid()
+});
+
+const removeLocationParamsSchema = z.object({
+  locationId: z.string().uuid()
+});
+
+const updateCommentSchema = z.object({
+  content: z.string().min(10).optional(),
+  status: z.enum(['pending', 'approved', 'denied', 'removed']).optional()
+});
+
+const updateRatingSchema = z.object({
+  pricing_transparency: z.number().min(0).max(5).optional(),
+  friendliness: z.number().min(0).max(5).optional(),
+  lgbtq_acceptance: z.number().min(0).max(5).optional(),
+  racial_tolerance: z.number().min(0).max(5).optional(),
+  religious_tolerance: z.number().min(0).max(5).optional(),
+  accessibility_friendliness: z.number().min(0).max(5).optional(),
+  cleanliness: z.number().min(0).max(5).optional(),
+  status: z.enum(['pending', 'approved', 'denied', 'removed']).optional()
+});
+
+const mediaRemoveSchema = z.object({
+  bucket: z.enum([BUSINESS_MEDIA_BUCKET, REVIEW_MEDIA_BUCKET]),
+  object_path: z.string().min(1)
+});
+
 const moderationTable = {
   rating: 'ratings',
   comment: 'comments',
   business_reply: 'business_replies'
 } as const;
 
+type AdminTier = 'admin' | 'super_admin' | 'owner';
+
+const ownerEmails = new Set(
+  env.OWNER_EMAILS.split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+const resolveAdminTier = (user: { role: string; email?: string }): AdminTier | null => {
+  if (user.email && ownerEmails.has(user.email.toLowerCase())) return 'owner';
+  if (user.role === 'admin') return 'super_admin';
+  if (user.role === 'moderator') return 'admin';
+  return null;
+};
+
+const tierAllows = (tier: AdminTier, required: AdminTier) => {
+  const order: Record<AdminTier, number> = { admin: 1, super_admin: 2, owner: 3 };
+  return order[tier] >= order[required];
+};
+
+const requireAdminTier = async (request: Parameters<typeof requireRole>[0], required: AdminTier) => {
+  const actor = await requireRole(request, ['moderator', 'admin']);
+  const tier = resolveAdminTier(actor);
+  if (!tier || !tierAllows(tier, required)) {
+    throw new ApiError(403, 'FORBIDDEN', 'Insufficient admin tier');
+  }
+  return { actor, tier };
+};
+
 export const adminRoutes: FastifyPluginAsync = async (app) => {
+  app.get(
+    '/admin/me',
+    {
+      schema: {
+        summary: 'Get admin tier information',
+        tags: ['Admin'],
+        security: [{ bearerAuth: [] }]
+      }
+    },
+    async (request) => {
+      const actor = await requireRole(request, ['moderator', 'admin']);
+      const tier = resolveAdminTier(actor);
+      if (!tier) throw new ApiError(403, 'FORBIDDEN', 'Not an admin user');
+      return { data: { id: actor.id, email: actor.email ?? null, role: actor.role, tier } };
+    }
+  );
+
+  app.get(
+    '/admin/inbox',
+    {
+      schema: {
+        summary: 'Admin inbox task list',
+        tags: ['Admin'],
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: 'object',
+          properties: {
+            category: {
+              type: 'string',
+              enum: ['all', 'business_requests', 'claim_requests', 'location_requests', 'moderation']
+            },
+            status: { type: 'string', enum: ['all', 'submitted', 'under_review', 'resolved', 'rejected'] },
+            q: { type: 'string' }
+          }
+        }
+      }
+    },
+    async (request) => {
+      await requireAdminTier(request, 'admin');
+      const query = adminInboxQuerySchema.parse(request.query);
+
+      let appealsQuery = supabaseAdmin
+        .from('appeals')
+        .select('id,business_id,target_type,target_business_id,target_location_id,submitted_by,reason,details,status,created_at,updated_at,resolved_at,admin_decision_notes')
+        .order('updated_at', { ascending: false })
+        .limit(200);
+
+      if (query.status !== 'all') appealsQuery = appealsQuery.eq('status', query.status);
+      if (query.category === 'business_requests') appealsQuery = appealsQuery.in('reason', ['claim_request', 'location_add_request', 'business_update_request']);
+      if (query.category === 'claim_requests') appealsQuery = appealsQuery.eq('reason', 'claim_request');
+      if (query.category === 'location_requests') appealsQuery = appealsQuery.eq('reason', 'location_add_request');
+
+      const [appealsRes, queueRes] = await Promise.all([
+        query.category === 'moderation'
+          ? Promise.resolve({ data: [], error: null })
+          : appealsQuery,
+        query.category === 'all' || query.category === 'moderation'
+          ? Promise.all([
+              supabaseAdmin.from('ratings').select('id,location_id,user_id,status,created_at').eq('status', 'pending').order('created_at', { ascending: false }).limit(100),
+              supabaseAdmin.from('comments').select('id,location_id,user_id,status,created_at,content').eq('status', 'pending').order('created_at', { ascending: false }).limit(100),
+              supabaseAdmin.from('business_replies').select('id,comment_id,business_id,status,created_at,content').eq('status', 'pending').order('created_at', { ascending: false }).limit(100)
+            ])
+          : Promise.resolve([
+              { data: [], error: null },
+              { data: [], error: null },
+              { data: [], error: null }
+            ])
+      ]);
+
+      const [ratingsRes, commentsRes, repliesRes] = queueRes;
+
+      if (appealsRes.error || ratingsRes.error || commentsRes.error || repliesRes.error) {
+        throw new ApiError(
+          500,
+          'INTERNAL_ERROR',
+          appealsRes.error?.message ??
+            ratingsRes.error?.message ??
+            commentsRes.error?.message ??
+            repliesRes.error?.message ??
+            'Inbox lookup failed'
+        );
+      }
+
+      let appeals = appealsRes.data ?? [];
+      if (query.q) {
+        const q = query.q.toLowerCase();
+        appeals = appeals.filter(
+          (item) =>
+            item.reason.toLowerCase().includes(q) ||
+            item.details.toLowerCase().includes(q) ||
+            item.status.toLowerCase().includes(q)
+        );
+      }
+
+      return {
+        data: {
+          appeals,
+          moderation: {
+            ratings: ratingsRes.data ?? [],
+            comments: commentsRes.data ?? [],
+            business_replies: repliesRes.data ?? []
+          }
+        }
+      };
+    }
+  );
+
   app.get(
     '/admin/moderation/queue',
     {
@@ -137,6 +316,54 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   );
 
   app.post(
+    '/admin/appeals/:appealId/request-info',
+    {
+      schema: {
+        summary: 'Request more information for an appeal',
+        tags: ['Admin'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['appealId'],
+          properties: { appealId: { type: 'string', format: 'uuid' } }
+        },
+        body: {
+          type: 'object',
+          required: ['note'],
+          properties: { note: { type: 'string', minLength: 3 } }
+        }
+      }
+    },
+    async (request) => {
+      const { actor } = await requireAdminTier(request, 'admin');
+      const params = z.object({ appealId: z.string().uuid() }).parse(request.params);
+      const body = requestInfoSchema.parse(request.body);
+
+      const update = await supabaseAdmin
+        .from('appeals')
+        .update({
+          status: 'under_review',
+          admin_decision_notes: body.note
+        })
+        .eq('id', params.appealId)
+        .select('id,status,admin_decision_notes')
+        .single();
+
+      if (update.error || !update.data) throw new ApiError(404, 'NOT_FOUND', 'Appeal not found');
+
+      await supabaseAdmin.from('moderation_actions').insert({
+        actor_user_id: actor.id,
+        target_type: 'appeal',
+        target_id: params.appealId,
+        action: 'appeal_request_info',
+        metadata: { note: body.note }
+      });
+
+      return { data: update.data };
+    }
+  );
+
+  app.post(
     '/admin/roles/assign',
     {
       schema: {
@@ -154,8 +381,12 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       }
     },
     async (request) => {
-    await requireRole(request, ['admin']);
+    const { tier } = await requireAdminTier(request, 'super_admin');
     const body = roleAssignSchema.parse(request.body);
+
+    if (tier === 'super_admin' && body.role === 'admin') {
+      throw new ApiError(403, 'FORBIDDEN', 'Only owner can assign admin role');
+    }
 
     const update = await supabaseAdmin.from('users').update({ role: body.role }).eq('id', body.user_id).select('id,role').single();
     if (update.error || !update.data) {
@@ -300,6 +531,230 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return { data: update.data };
+    }
+  );
+
+  app.get(
+    '/admin/users',
+    {
+      schema: {
+        summary: 'List users for admin assignment',
+        tags: ['Admin'],
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: 'object',
+          properties: {
+            q: { type: 'string' }
+          }
+        }
+      }
+    },
+    async (request) => {
+      await requireAdminTier(request, 'super_admin');
+      const query = z.object({ q: z.string().optional() }).parse(request.query);
+
+      let usersQ = supabaseAdmin
+        .from('users')
+        .select('id,email,role,status,created_at')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (query.q) usersQ = usersQ.ilike('email', `%${query.q}%`);
+      const usersRes = await usersQ;
+      if (usersRes.error) throw new ApiError(500, 'INTERNAL_ERROR', usersRes.error.message);
+      return { data: usersRes.data ?? [] };
+    }
+  );
+
+  app.patch(
+    '/admin/comments/:commentId',
+    {
+      schema: {
+        summary: 'Edit or moderate a comment',
+        tags: ['Admin'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['commentId'],
+          properties: { commentId: { type: 'string', format: 'uuid' } }
+        },
+        body: {
+          type: 'object',
+          properties: {
+            content: { type: 'string', minLength: 10 },
+            status: { type: 'string', enum: ['pending', 'approved', 'denied', 'removed'] }
+          }
+        }
+      }
+    },
+    async (request) => {
+      const { actor } = await requireAdminTier(request, 'super_admin');
+      const params = z.object({ commentId: z.string().uuid() }).parse(request.params);
+      const body = updateCommentSchema.parse(request.body);
+      const patch: Record<string, unknown> = {};
+      if (body.content) patch.content = body.content;
+      if (body.status) patch.status = body.status;
+      if (!Object.keys(patch).length) throw new ApiError(422, 'VALIDATION_ERROR', 'No update fields provided');
+      const updated = await supabaseAdmin.from('comments').update(patch).eq('id', params.commentId).select('id,status,content').single();
+      if (updated.error || !updated.data) throw new ApiError(404, 'NOT_FOUND', 'Comment not found');
+      await supabaseAdmin.from('moderation_actions').insert({
+        actor_user_id: actor.id,
+        target_type: 'comment',
+        target_id: params.commentId,
+        action: 'comment_edit',
+        metadata: patch
+      });
+      return { data: updated.data };
+    }
+  );
+
+  app.patch(
+    '/admin/ratings/:ratingId',
+    {
+      schema: {
+        summary: 'Edit or moderate a rating',
+        tags: ['Admin'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['ratingId'],
+          properties: { ratingId: { type: 'string', format: 'uuid' } }
+        },
+        body: {
+          type: 'object',
+          properties: {
+            pricing_transparency: { type: 'number' },
+            friendliness: { type: 'number' },
+            lgbtq_acceptance: { type: 'number' },
+            racial_tolerance: { type: 'number' },
+            religious_tolerance: { type: 'number' },
+            accessibility_friendliness: { type: 'number' },
+            cleanliness: { type: 'number' },
+            status: { type: 'string', enum: ['pending', 'approved', 'denied', 'removed'] }
+          }
+        }
+      }
+    },
+    async (request) => {
+      const { actor } = await requireAdminTier(request, 'super_admin');
+      const params = z.object({ ratingId: z.string().uuid() }).parse(request.params);
+      const body = updateRatingSchema.parse(request.body);
+      const patch: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(body)) {
+        if (value !== undefined) patch[key] = value;
+      }
+      if (!Object.keys(patch).length) throw new ApiError(422, 'VALIDATION_ERROR', 'No update fields provided');
+      const updated = await supabaseAdmin.from('ratings').update(patch).eq('id', params.ratingId).select('id,status,overall_score').single();
+      if (updated.error || !updated.data) throw new ApiError(404, 'NOT_FOUND', 'Rating not found');
+      await supabaseAdmin.from('moderation_actions').insert({
+        actor_user_id: actor.id,
+        target_type: 'rating',
+        target_id: params.ratingId,
+        action: 'rating_edit',
+        metadata: patch
+      });
+      return { data: updated.data };
+    }
+  );
+
+  app.post(
+    '/admin/businesses/:businessId/remove',
+    {
+      schema: {
+        summary: 'Remove business from active directory',
+        tags: ['Admin'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['businessId'],
+          properties: { businessId: { type: 'string', format: 'uuid' } }
+        }
+      }
+    },
+    async (request) => {
+      const { actor } = await requireAdminTier(request, 'super_admin');
+      const params = removeBusinessParamsSchema.parse(request.params);
+      const update = await supabaseAdmin
+        .from('businesses')
+        .update({ status: 'suspended' })
+        .eq('id', params.businessId)
+        .select('id,status')
+        .single();
+      if (update.error || !update.data) throw new ApiError(404, 'NOT_FOUND', 'Business not found');
+      await supabaseAdmin.from('moderation_actions').insert({
+        actor_user_id: actor.id,
+        target_type: 'business',
+        target_id: params.businessId,
+        action: 'business_remove'
+      });
+      return { data: update.data };
+    }
+  );
+
+  app.post(
+    '/admin/locations/:locationId/remove',
+    {
+      schema: {
+        summary: 'Remove location from active directory',
+        tags: ['Admin'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['locationId'],
+          properties: { locationId: { type: 'string', format: 'uuid' } }
+        }
+      }
+    },
+    async (request) => {
+      const { actor } = await requireAdminTier(request, 'super_admin');
+      const params = removeLocationParamsSchema.parse(request.params);
+      const update = await supabaseAdmin
+        .from('business_locations')
+        .update({ status: 'suspended' })
+        .eq('id', params.locationId)
+        .select('id,status')
+        .single();
+      if (update.error || !update.data) throw new ApiError(404, 'NOT_FOUND', 'Location not found');
+      await supabaseAdmin.from('moderation_actions').insert({
+        actor_user_id: actor.id,
+        target_type: 'business',
+        target_id: params.locationId,
+        action: 'location_remove'
+      });
+      return { data: update.data };
+    }
+  );
+
+  app.post(
+    '/admin/media/remove',
+    {
+      schema: {
+        summary: 'Remove image from storage',
+        tags: ['Admin'],
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          required: ['bucket', 'object_path'],
+          properties: {
+            bucket: { type: 'string', enum: [BUSINESS_MEDIA_BUCKET, REVIEW_MEDIA_BUCKET] },
+            object_path: { type: 'string', minLength: 1 }
+          }
+        }
+      }
+    },
+    async (request) => {
+      const { actor } = await requireAdminTier(request, 'super_admin');
+      const body = mediaRemoveSchema.parse(request.body);
+      const remove = await supabaseAdmin.storage.from(body.bucket).remove([body.object_path]);
+      if (remove.error) throw new ApiError(422, 'VALIDATION_ERROR', remove.error.message);
+      await supabaseAdmin.from('moderation_actions').insert({
+        actor_user_id: actor.id,
+        target_type: 'business',
+        target_id: actor.id,
+        action: 'media_remove',
+        metadata: { bucket: body.bucket, object_path: body.object_path }
+      });
+      return { data: { removed: true } };
     }
   );
 
