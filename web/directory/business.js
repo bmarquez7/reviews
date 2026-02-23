@@ -30,6 +30,17 @@ const req = async (path, options = {}) => {
   return json;
 };
 
+const reqForm = async (path, formData, options = {}) => {
+  const res = await fetch(`${apiBase}${path}`, {
+    ...options,
+    body: formData,
+    headers: { ...(options.headers || {}) }
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw json;
+  return json;
+};
+
 const logoRatingMarkup = (score) => {
   if (score == null || Number.isNaN(Number(score))) return '<span class="muted">n/a</span>';
   const safe = Math.max(0, Math.min(5, Number(score)));
@@ -63,17 +74,22 @@ const closeImageLightbox = () => $('imageLightbox').classList.add('hidden');
 const syncAdminLink = async () => {
   const link = $('bizAdminLink');
   if (!link) return;
+  const panel = $('manageBusinessPanel');
   if (!state.token) {
     link.classList.add('hidden');
+    panel?.classList.add('hidden');
     return;
   }
   try {
     const me = await req('/users/me', { headers: authHeaders() });
     const canAccess = me?.data?.role === 'admin' || me?.data?.role === 'moderator';
+    const canManage = me?.data?.role === 'admin' || me?.data?.role === 'business_owner';
     link.classList.toggle('hidden', !canAccess);
+    panel?.classList.toggle('hidden', !canManage);
     if (canAccess) link.href = `./admin.html?businessId=${businessId}`;
   } catch {
     link.classList.add('hidden');
+    panel?.classList.add('hidden');
   }
 };
 
@@ -169,6 +185,20 @@ const renderBusiness = (b) => {
     <div class="muted">${b.description || 'No description available yet.'}</div>
     <div class="muted">${b.mission_statement || ''}</div>
   `;
+
+  const formValues = {
+    bizEditName: b.name,
+    bizEditOwnerName: b.owner_name,
+    bizEditDescription: b.description,
+    bizEditMission: b.mission_statement,
+    bizEditPhone: b.primary_phone,
+    bizEditEmail: b.primary_email,
+    bizEditWebsite: b.website_url
+  };
+  Object.entries(formValues).forEach(([id, value]) => {
+    const el = $(id);
+    if (el) el.value = value || '';
+  });
 
   $('bizLocations').innerHTML = (b.locations || []).length
     ? b.locations
@@ -345,6 +375,87 @@ $('locationRequestForm').addEventListener('submit', async (e) => {
     showToast('ok', 'Location request submitted for verification.');
     $('locationRequestForm').reset();
     $('reqLocationCountry').value = 'Albania';
+  } catch (err) {
+    showToast('err', errMsg(err));
+  }
+});
+
+$('bizEditForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!state.token) {
+    showToast('err', 'Login first to edit business.');
+    return;
+  }
+  try {
+    await req(`/businesses/${businessId}`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        name: $('bizEditName').value.trim() || undefined,
+        owner_name: $('bizEditOwnerName').value.trim() || undefined,
+        description: $('bizEditDescription').value.trim() || undefined,
+        mission_statement: $('bizEditMission').value.trim() || undefined,
+        primary_phone: $('bizEditPhone').value.trim() || undefined,
+        primary_email: $('bizEditEmail').value.trim() || undefined,
+        website_url: $('bizEditWebsite').value.trim() || undefined
+      })
+    });
+    showToast('ok', 'Business updated');
+    await loadBusiness();
+  } catch (err) {
+    showToast('err', errMsg(err));
+  }
+});
+
+$('bizAddLocationForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!state.token) {
+    showToast('err', 'Login first to add location.');
+    return;
+  }
+  try {
+    const hoursRaw = $('bizLocHours').value.trim();
+    await req(`/businesses/${businessId}/locations`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        location_name: $('bizLocName').value.trim() || undefined,
+        address_line: $('bizLocAddress').value.trim(),
+        city: $('bizLocCity').value.trim(),
+        region: $('bizLocRegion').value.trim() || undefined,
+        country: $('bizLocCountry').value.trim() || 'Albania',
+        location_hours: hoursRaw ? JSON.parse(hoursRaw) : undefined
+      })
+    });
+    $('bizAddLocationForm').reset();
+    $('bizLocCountry').value = 'Albania';
+    showToast('ok', 'Location added');
+    await loadBusiness();
+  } catch (err) {
+    showToast('err', errMsg(err));
+  }
+});
+
+$('bizImageUploadForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!state.token) {
+    showToast('err', 'Login first to upload images.');
+    return;
+  }
+  try {
+    const files = Array.from($('bizImages').files || []);
+    if (!files.length) throw { error: { message: 'Choose one or more images.' } };
+    for (const file of files) {
+      const form = new FormData();
+      form.append('file', file);
+      await reqForm(`/media/businesses/${businessId}/images`, form, {
+        method: 'POST',
+        headers: authHeaders()
+      });
+    }
+    $('bizImages').value = '';
+    showToast('ok', `Uploaded ${files.length} image(s)`);
+    await loadBusiness();
   } catch (err) {
     showToast('err', errMsg(err));
   }

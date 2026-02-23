@@ -555,22 +555,36 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         querystring: {
           type: 'object',
           properties: {
-            q: { type: 'string' }
+            q: { type: 'string' },
+            role: { type: 'string', enum: ['consumer', 'business_owner', 'moderator', 'admin'] },
+            status: { type: 'string', enum: ['active', 'suspended'] },
+            sort: { type: 'string', enum: ['newest', 'email', 'role'] }
           }
         }
       }
     },
     async (request) => {
       await requireAdminTier(request, 'super_admin');
-      const query = z.object({ q: z.string().optional() }).parse(request.query);
+      const query = z
+        .object({
+          q: z.string().optional(),
+          role: z.enum(['consumer', 'business_owner', 'moderator', 'admin']).optional(),
+          status: z.enum(['active', 'suspended']).optional(),
+          sort: z.enum(['newest', 'email', 'role']).default('newest')
+        })
+        .parse(request.query);
 
       let usersQ = supabaseAdmin
         .from('users')
         .select('id,email,role,status,created_at')
-        .order('created_at', { ascending: false })
         .limit(100);
 
       if (query.q) usersQ = usersQ.ilike('email', `%${query.q}%`);
+      if (query.role) usersQ = usersQ.eq('role', query.role);
+      if (query.status) usersQ = usersQ.eq('status', query.status);
+      if (query.sort === 'newest') usersQ = usersQ.order('created_at', { ascending: false });
+      if (query.sort === 'email') usersQ = usersQ.order('email', { ascending: true });
+      if (query.sort === 'role') usersQ = usersQ.order('role', { ascending: true }).order('email', { ascending: true });
       const usersRes = await usersQ;
       if (usersRes.error) throw new ApiError(500, 'INTERNAL_ERROR', usersRes.error.message);
       return { data: usersRes.data ?? [] };

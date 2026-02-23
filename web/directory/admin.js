@@ -167,13 +167,40 @@ const renderBusinessEditor = () => {
   $('adminBizName').value = b.name || '';
   $('adminBizOwnerName').value = b.owner_name || '';
   $('adminBizDescription').value = b.description || '';
+  $('adminBizMission').value = b.mission_statement || '';
+  $('adminBizPhone').value = b.primary_phone || '';
+  $('adminBizEmail').value = b.primary_email || '';
+  $('adminBizWebsite').value = b.website_url || '';
+  $('adminBizFacebook').value = b.social_facebook || '';
+  $('adminBizInstagram').value = b.social_instagram || '';
+  $('adminBizTiktok').value = b.social_tiktok || '';
+  $('adminBizLinkedin').value = b.social_linkedin || '';
+  $('adminBizYoutube').value = b.social_youtube || '';
+  $('adminBizOther').value = b.social_other || '';
+  $('adminBizFoundedYear').value = b.founded_year || '';
   $('adminBizRemove').disabled = !canSuper();
 
   $('adminBizLocations').innerHTML = (b.locations || []).length
     ? b.locations
         .map(
           (loc) =>
-            `<article class="item"><div class="item-title">${loc.location_name || `${loc.city} location`}</div><div class="item-sub">${loc.address_line}, ${loc.city}, ${loc.country}</div>${canSuper() ? `<div class="actions"><button type="button" data-remove-location-id="${loc.id}">Remove Location</button></div>` : ''}</article>`
+            `<article class="item">
+              <div class="item-title">${loc.location_name || `${loc.city} location`}</div>
+              <div class="grid2">
+                <input data-loc-field="location_name" data-loc-id="${loc.id}" value="${loc.location_name || ''}" placeholder="Location name" />
+                <input data-loc-field="address_line" data-loc-id="${loc.id}" value="${loc.address_line || ''}" placeholder="Address line" />
+                <input data-loc-field="city" data-loc-id="${loc.id}" value="${loc.city || ''}" placeholder="City" />
+                <input data-loc-field="region" data-loc-id="${loc.id}" value="${loc.region || ''}" placeholder="Region" />
+                <input data-loc-field="country" data-loc-id="${loc.id}" value="${loc.country || ''}" placeholder="Country" />
+                <input data-loc-field="location_phone" data-loc-id="${loc.id}" value="${loc.location_phone || ''}" placeholder="Phone" />
+                <input data-loc-field="location_email" data-loc-id="${loc.id}" value="${loc.location_email || ''}" placeholder="Email" />
+                <textarea data-loc-field="location_hours" data-loc-id="${loc.id}" placeholder='Hours JSON'>${loc.location_hours ? JSON.stringify(loc.location_hours) : ''}</textarea>
+              </div>
+              <div class="actions">
+                <button type="button" data-save-location-id="${loc.id}">Save Location</button>
+                ${canSuper() ? `<button type="button" data-remove-location-id="${loc.id}">Remove Location</button>` : ''}
+              </div>
+            </article>`
         )
         .join('')
     : '<div class="muted">No locations found.</div>';
@@ -203,6 +230,31 @@ const selectBusiness = async (businessId) => {
   const data = await req(`/businesses/${businessId}`);
   state.selectedBusiness = data.data;
   renderBusinessEditor();
+};
+
+const loadUsers = async () => {
+  if (!canSuper()) {
+    $('adminUserResults').innerHTML = '<div class="muted">Super admin required.</div>';
+    return;
+  }
+  const params = new URLSearchParams({
+    sort: $('adminUserSort').value || 'newest'
+  });
+  const q = $('adminUserSearch').value.trim();
+  const role = $('adminUserRoleFilter').value;
+  const status = $('adminUserStatusFilter').value;
+  if (q) params.set('q', q);
+  if (role) params.set('role', role);
+  if (status) params.set('status', status);
+  const users = await req(`/admin/users?${params.toString()}`);
+  $('adminUserResults').innerHTML = !(users.data || []).length
+    ? '<div class="muted">No users found.</div>'
+    : users.data
+        .map(
+          (u) =>
+            `<article class="item"><div class="item-title">${u.email || u.id}</div><div class="item-sub">role: ${u.role} · status: ${u.status}</div><div class="actions"><button type="button" data-user-email="${u.email || ''}" data-user-id="${u.id}" data-user-role="${u.role}">Use In Role Form</button>${u.status === 'active' ? `<button type="button" data-suspend-user-id="${u.id}">Suspend</button>` : ''}</div></article>`
+        )
+        .join('');
 };
 
 const renderDetail = () => {
@@ -383,7 +435,18 @@ $('adminBizSave').addEventListener('click', async () => {
       body: JSON.stringify({
         name: $('adminBizName').value.trim() || undefined,
         owner_name: $('adminBizOwnerName').value.trim() || undefined,
-        description: $('adminBizDescription').value.trim() || undefined
+        description: $('adminBizDescription').value.trim() || undefined,
+        mission_statement: $('adminBizMission').value.trim() || undefined,
+        primary_phone: $('adminBizPhone').value.trim() || undefined,
+        primary_email: $('adminBizEmail').value.trim() || undefined,
+        website_url: $('adminBizWebsite').value.trim() || undefined,
+        social_facebook: $('adminBizFacebook').value.trim() || undefined,
+        social_instagram: $('adminBizInstagram').value.trim() || undefined,
+        social_tiktok: $('adminBizTiktok').value.trim() || undefined,
+        social_linkedin: $('adminBizLinkedin').value.trim() || undefined,
+        social_youtube: $('adminBizYoutube').value.trim() || undefined,
+        social_other: $('adminBizOther').value.trim() || undefined,
+        founded_year: $('adminBizFoundedYear').value ? Number($('adminBizFoundedYear').value) : undefined
       })
     });
     showToast('ok', 'Business updated');
@@ -409,14 +472,90 @@ $('adminBizRemove').addEventListener('click', async () => {
 
 $('adminBizLocations').addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-remove-location-id]');
-  if (!btn) return;
+  const saveBtn = e.target.closest('[data-save-location-id]');
   try {
-    if (!canSuper()) throw { error: { message: 'Super admin required.' } };
-    await req(`/admin/locations/${btn.dataset.removeLocationId}/remove`, { method: 'POST' });
-    showToast('ok', 'Location removed');
-    if (state.selectedBusiness) await selectBusiness(state.selectedBusiness.id);
+    if (saveBtn) {
+      if (!state.selectedBusiness) throw { error: { message: 'Select business first.' } };
+      const locationId = saveBtn.dataset.saveLocationId;
+      const fields = Array.from(
+        document.querySelectorAll(`[data-loc-id="${locationId}"]`)
+      );
+      const patch = {};
+      for (const field of fields) {
+        const key = field.dataset.locField;
+        if (!key) continue;
+        const raw = field.value?.trim?.() ?? '';
+        if (key === 'location_hours') {
+          patch[key] = raw ? JSON.parse(raw) : null;
+        } else {
+          patch[key] = raw || null;
+        }
+      }
+      await req(`/businesses/${state.selectedBusiness.id}/locations/${locationId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch)
+      });
+      showToast('ok', 'Location updated');
+      await selectBusiness(state.selectedBusiness.id);
+      return;
+    }
+
+    if (btn) {
+      if (!canSuper()) throw { error: { message: 'Super admin required.' } };
+      await req(`/admin/locations/${btn.dataset.removeLocationId}/remove`, { method: 'POST' });
+      showToast('ok', 'Location removed');
+      if (state.selectedBusiness) await selectBusiness(state.selectedBusiness.id);
+    }
   } catch (err) {
-    showToast('err', err?.error?.message || 'Failed to remove location');
+    showToast('err', err?.error?.message || 'Failed to process location action');
+  }
+});
+
+$('adminAddLocationForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    if (!state.selectedBusiness) throw { error: { message: 'Select a business first.' } };
+    const hoursRaw = $('adminLocHours').value.trim();
+    const location_hours = hoursRaw ? JSON.parse(hoursRaw) : undefined;
+    await req(`/businesses/${state.selectedBusiness.id}/locations`, {
+      method: 'POST',
+      body: JSON.stringify({
+        location_name: $('adminLocName').value.trim() || undefined,
+        address_line: $('adminLocAddress').value.trim(),
+        city: $('adminLocCity').value.trim(),
+        region: $('adminLocRegion').value.trim() || undefined,
+        country: $('adminLocCountry').value.trim() || 'Albania',
+        location_phone: $('adminLocPhone').value.trim() || undefined,
+        location_email: $('adminLocEmail').value.trim() || undefined,
+        location_hours
+      })
+    });
+    $('adminAddLocationForm').reset();
+    $('adminLocCountry').value = 'Albania';
+    showToast('ok', 'Location added');
+    await selectBusiness(state.selectedBusiness.id);
+  } catch (err) {
+    showToast('err', err?.error?.message || 'Failed to add location');
+  }
+});
+
+$('adminBizImageForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    if (!state.selectedBusiness) throw { error: { message: 'Select a business first.' } };
+    if (!canSuper()) throw { error: { message: 'Super admin required.' } };
+    const files = Array.from($('adminBizImages').files || []);
+    if (!files.length) throw { error: { message: 'Choose one or more images.' } };
+    for (const file of files) {
+      const form = new FormData();
+      form.append('file', file);
+      await reqForm(`/media/businesses/${state.selectedBusiness.id}/images`, form);
+    }
+    $('adminBizImages').value = '';
+    showToast('ok', `Uploaded ${files.length} image(s)`);
+    await selectBusiness(state.selectedBusiness.id);
+  } catch (err) {
+    showToast('err', err?.error?.message || 'Image upload failed');
   }
 });
 
@@ -441,6 +580,53 @@ $('roleAssignForm').addEventListener('submit', async (e) => {
     $('roleAssignEmail').value = '';
   } catch (err) {
     showToast('err', err?.error?.message || 'Role assignment failed');
+  }
+});
+
+['adminUserSearch', 'adminUserRoleFilter', 'adminUserStatusFilter', 'adminUserSort'].forEach((id) => {
+  $(id).addEventListener('input', () => {
+    clearTimeout(window.__adminUserSearchTimer);
+    window.__adminUserSearchTimer = setTimeout(() => {
+      loadUsers().catch((err) => showToast('err', err?.error?.message || 'Failed loading users'));
+    }, 220);
+  });
+  $(id).addEventListener('change', () => {
+    loadUsers().catch((err) => showToast('err', err?.error?.message || 'Failed loading users'));
+  });
+});
+
+$('adminUserResults').addEventListener('click', async (e) => {
+  const useBtn = e.target.closest('[data-user-id]');
+  const suspendBtn = e.target.closest('[data-suspend-user-id]');
+  try {
+    if (useBtn) {
+      $('roleAssignEmail').value = useBtn.dataset.userEmail || '';
+      $('roleAssignValue').value = useBtn.dataset.userRole || 'consumer';
+      return;
+    }
+    if (suspendBtn) {
+      await req(`/admin/users/${suspendBtn.dataset.suspendUserId}/suspend`, { method: 'POST' });
+      showToast('ok', 'User suspended');
+      await loadUsers();
+    }
+  } catch (err) {
+    showToast('err', err?.error?.message || 'User action failed');
+  }
+});
+
+$('adminResetPasswordForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const email = $('adminResetEmail').value.trim();
+    if (!email) throw { error: { message: 'Email required.' } };
+    await req('/auth/password-reset/request', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    });
+    showToast('ok', 'Password reset email sent');
+    $('adminResetEmail').value = '';
+  } catch (err) {
+    showToast('err', err?.error?.message || 'Failed to send password reset');
   }
 });
 
@@ -485,6 +671,7 @@ $('adminImageBatchForm').addEventListener('submit', async (e) => {
     await loadMe();
     renderCategories();
     await loadInbox();
+    await loadUsers();
     if (initialBusinessId) {
       await selectBusiness(initialBusinessId);
     } else if (initialQ) {

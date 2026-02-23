@@ -56,12 +56,68 @@
               <input id="adminBizName" type="text" placeholder="Business name" />
               <input id="adminBizOwnerName" type="text" placeholder="Owner name" />
               <input id="adminBizDescription" type="text" placeholder="Description" />
+              <input id="adminBizMission" type="text" placeholder="Mission statement" />
+              <input id="adminBizPhone" type="text" placeholder="Primary phone" />
+              <input id="adminBizEmail" type="email" placeholder="Primary email" />
+              <input id="adminBizWebsite" type="text" placeholder="Website URL" />
+              <input id="adminBizFacebook" type="text" placeholder="Facebook URL" />
+              <input id="adminBizInstagram" type="text" placeholder="Instagram URL" />
+              <input id="adminBizTiktok" type="text" placeholder="TikTok URL" />
+              <input id="adminBizLinkedin" type="text" placeholder="LinkedIn URL" />
+              <input id="adminBizYoutube" type="text" placeholder="YouTube URL" />
+              <input id="adminBizOther" type="text" placeholder="Other social URL" />
+              <input id="adminBizFoundedYear" type="number" min="1800" max="2100" placeholder="Founded year" />
               <div class="actions">
                 <button id="adminBizSave" type="button">Save Business</button>
                 <button id="adminBizRemove" type="button">Remove Business</button>
               </div>
+              <h3>Add Location</h3>
+              <form id="adminAddLocationForm" class="grid2">
+                <input id="adminLocName" type="text" placeholder="Location name" />
+                <input id="adminLocAddress" type="text" placeholder="Address line" />
+                <input id="adminLocCity" type="text" placeholder="City" />
+                <input id="adminLocRegion" type="text" placeholder="Region" />
+                <input id="adminLocCountry" type="text" placeholder="Country" value="Albania" />
+                <input id="adminLocPhone" type="text" placeholder="Location phone" />
+                <input id="adminLocEmail" type="email" placeholder="Location email" />
+                <textarea id="adminLocHours" placeholder='Hours JSON e.g. {"mon":"9-18","tue":"9-18"}'></textarea>
+                <button type="submit">Add Location</button>
+              </form>
               <h3>Locations</h3>
               <div id="adminBizLocations" class="list small"></div>
+              <h3>Batch Images</h3>
+              <form id="adminBizImageForm" class="grid2">
+                <input id="adminBizImages" type="file" accept="image/*" multiple />
+                <button type="submit">Upload Business Images</button>
+              </form>
+            </div>
+            <div class="admin-user-tools">
+              <h3>Users</h3>
+              <div class="row gap-sm">
+                <input id="adminUserSearch" type="text" placeholder="Search users by email..." />
+                <select id="adminUserRoleFilter">
+                  <option value="">All roles</option>
+                  <option value="consumer">consumer</option>
+                  <option value="business_owner">business_owner</option>
+                  <option value="moderator">admin</option>
+                  <option value="admin">super_admin</option>
+                </select>
+                <select id="adminUserStatusFilter">
+                  <option value="">All status</option>
+                  <option value="active">active</option>
+                  <option value="suspended">suspended</option>
+                </select>
+                <select id="adminUserSort">
+                  <option value="newest">Newest</option>
+                  <option value="email">Email A-Z</option>
+                  <option value="role">Role</option>
+                </select>
+              </div>
+              <div id="adminUserResults" class="list small"></div>
+              <form id="adminResetPasswordForm" class="grid2">
+                <input id="adminResetEmail" type="email" placeholder="Email to send reset password" />
+                <button type="submit">Send Password Reset</button>
+              </form>
             </div>
           </div>
         </section>

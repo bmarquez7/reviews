@@ -67,6 +67,32 @@
         <div class="actions">
           <button id="logout" type="button">Logout</button>
         </div>
+        <section id="manageBusinessPanel" class="hidden" style="margin-top:0.7rem;">
+          <h3>Manage Business</h3>
+          <form id="bizEditForm" class="grid2">
+            <input id="bizEditName" type="text" placeholder="Business name" />
+            <input id="bizEditOwnerName" type="text" placeholder="Owner name" />
+            <input id="bizEditDescription" type="text" placeholder="Description" />
+            <input id="bizEditMission" type="text" placeholder="Mission statement" />
+            <input id="bizEditPhone" type="text" placeholder="Primary phone" />
+            <input id="bizEditEmail" type="email" placeholder="Primary email" />
+            <input id="bizEditWebsite" type="text" placeholder="Website URL" />
+            <button type="submit">Save Business</button>
+          </form>
+          <form id="bizAddLocationForm" class="grid2" style="margin-top:0.6rem;">
+            <input id="bizLocName" type="text" placeholder="Location name" />
+            <input id="bizLocAddress" type="text" placeholder="Address line" />
+            <input id="bizLocCity" type="text" placeholder="City" />
+            <input id="bizLocRegion" type="text" placeholder="Region" />
+            <input id="bizLocCountry" type="text" placeholder="Country" value="Albania" />
+            <textarea id="bizLocHours" placeholder='Hours JSON e.g. {"mon":"9-18","tue":"9-18"}'></textarea>
+            <button type="submit">Add Location</button>
+          </form>
+          <form id="bizImageUploadForm" class="grid2" style="margin-top:0.6rem;">
+            <input id="bizImages" type="file" accept="image/*" multiple />
+            <button type="submit">Upload Business Images</button>
+          </form>
+        </section>
       </section>
 
       <section id="section-hours" class="card profile-left section-anchor">

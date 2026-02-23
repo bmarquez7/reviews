@@ -348,7 +348,14 @@ export const businessRoutes: FastifyPluginAsync = async (app) => {
             mission_statement: { type: 'string' },
             primary_phone: { type: 'string' },
             primary_email: { type: 'string', format: 'email' },
-            website_url: { type: 'string', format: 'uri' }
+            website_url: { type: 'string', format: 'uri' },
+            social_facebook: { type: 'string', format: 'uri' },
+            social_instagram: { type: 'string', format: 'uri' },
+            social_tiktok: { type: 'string', format: 'uri' },
+            social_linkedin: { type: 'string', format: 'uri' },
+            social_youtube: { type: 'string', format: 'uri' },
+            social_other: { type: 'string', format: 'uri' },
+            founded_year: { type: 'integer', minimum: 1800, maximum: 2100 }
           }
         }
       }
@@ -364,7 +371,14 @@ export const businessRoutes: FastifyPluginAsync = async (app) => {
           mission_statement: z.string().optional(),
           primary_phone: z.string().optional(),
           primary_email: z.string().email().optional(),
-          website_url: z.string().url().optional()
+          website_url: z.string().url().optional(),
+          social_facebook: z.string().url().optional(),
+          social_instagram: z.string().url().optional(),
+          social_tiktok: z.string().url().optional(),
+          social_linkedin: z.string().url().optional(),
+          social_youtube: z.string().url().optional(),
+          social_other: z.string().url().optional(),
+          founded_year: z.number().int().min(1800).max(2100).optional()
         })
         .parse(request.body);
 
@@ -381,6 +395,84 @@ export const businessRoutes: FastifyPluginAsync = async (app) => {
 
       if (update.error || !update.data) {
         throw new ApiError(422, 'VALIDATION_ERROR', update.error?.message ?? 'Unable to update business');
+      }
+
+      return { data: update.data };
+    }
+  );
+
+  app.patch(
+    '/businesses/:businessId/locations/:locationId',
+    {
+      schema: {
+        summary: 'Update business location',
+        tags: ['Business'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['businessId', 'locationId'],
+          properties: {
+            businessId: { type: 'string', format: 'uuid' },
+            locationId: { type: 'string', format: 'uuid' }
+          }
+        },
+        body: {
+          type: 'object',
+          properties: {
+            location_name: { type: 'string' },
+            address_line: { type: 'string' },
+            city: { type: 'string' },
+            region: { type: 'string' },
+            country: { type: 'string' },
+            postal_code: { type: 'string' },
+            location_phone: { type: 'string' },
+            location_email: { type: 'string', format: 'email' },
+            location_hours: { type: 'object', additionalProperties: true },
+            opened_year: { type: 'integer', minimum: 1800, maximum: 2100 }
+          }
+        }
+      }
+    },
+    async (request) => {
+      const user = await requireRole(request, ['business_owner', 'admin']);
+      const params = z.object({ businessId: z.string().uuid(), locationId: z.string().uuid() }).parse(request.params);
+      const body = z
+        .object({
+          location_name: z.string().optional(),
+          address_line: z.string().optional(),
+          city: z.string().optional(),
+          region: z.string().optional(),
+          country: z.string().optional(),
+          postal_code: z.string().optional(),
+          location_phone: z.string().optional(),
+          location_email: z.string().email().optional(),
+          location_hours: z.record(z.unknown()).optional(),
+          opened_year: z.number().int().min(1800).max(2100).optional()
+        })
+        .parse(request.body);
+
+      if (user.role !== 'admin') {
+        await assertBusinessOwner(user.id, params.businessId);
+      }
+
+      const patch: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(body)) {
+        if (value !== undefined) patch[key] = value;
+      }
+      if (!Object.keys(patch).length) {
+        throw new ApiError(422, 'VALIDATION_ERROR', 'No update fields provided');
+      }
+
+      const update = await supabaseAdmin
+        .from('business_locations')
+        .update(patch)
+        .eq('id', params.locationId)
+        .eq('business_id', params.businessId)
+        .select('*')
+        .single();
+
+      if (update.error || !update.data) {
+        throw new ApiError(422, 'VALIDATION_ERROR', update.error?.message ?? 'Unable to update location');
       }
 
       return { data: update.data };
