@@ -606,8 +606,8 @@ $('reviewsNext').addEventListener('click', () => {
 $('businessesList').addEventListener('click', async (e) => {
   const card = e.target.closest('[data-business-id]');
   if (!card) return;
-  const apiBase = encodeURIComponent(state.apiBase);
-  window.location.href = `./business.html?businessId=${card.dataset.businessId}&apiBase=${apiBase}`;
+  localStorage.setItem('dir.apiBase', state.apiBase);
+  window.location.href = `./business.html?businessId=${card.dataset.businessId}`;
 });
 $('locationsList').addEventListener('click', async (e) => {
   const card = e.target.closest('[data-location-id]');

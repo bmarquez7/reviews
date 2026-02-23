@@ -155,7 +155,7 @@ const renderReviews = (items) => {
       <article class="review-card">
         <div class="review-head">
           <div class="review-user">
-            <span class="avatar">${(rv.screen_name || 'US').slice(0,2).toUpperCase()}</span>
+            ${rv.profile_image_url ? `<img class="avatar" src="${rv.profile_image_url}" alt="${rv.screen_name || 'Reviewer'}" />` : `<span class="avatar">${(rv.screen_name || 'US').slice(0,2).toUpperCase()}</span>`}
             <div>
               <div><strong>${rv.screen_name || 'User'}</strong></div>
               <div class="review-meta">${rv.country_of_origin || ''} ${rv.age_range_public ? `• ${rv.age_range_public}` : ''}</div>
