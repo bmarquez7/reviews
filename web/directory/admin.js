@@ -10,7 +10,8 @@ const state = {
   status: 'all',
   tasks: [],
   selected: null,
-  q: ''
+  q: '',
+  selectedBusiness: null
 };
 
 const showToast = (type, message) => {
@@ -46,8 +47,40 @@ const reqForm = async (path, formData) => {
 };
 
 const tierRank = (tier) => (tier === 'owner' ? 3 : tier === 'super_admin' ? 2 : tier === 'admin' ? 1 : 0);
+const canSuper = () => tierRank(state.tier) >= 2;
+const canOwner = () => tierRank(state.tier) >= 3;
 
 const renderCategories = () => {
+  const canSuper = tierRank(state.tier) >= 2;
+  const canOwner = tierRank(state.tier) >= 3;
+  const folderHints = {
+    all: canOwner
+      ? 'All actions, role management, and batch tools'
+      : canSuper
+        ? 'All actions plus edit/remove and batch tools'
+        : 'Approve, deny, and request more info',
+    business_requests: canOwner
+      ? 'Approve/deny/info, remove entities, assign admins'
+      : canSuper
+        ? 'Approve/deny/info, remove entities, edit records'
+        : 'Approve, deny, request more info',
+    claim_requests: canOwner
+      ? 'Approve transfer, deny, request info, role controls'
+      : canSuper
+        ? 'Approve transfer, deny, request info'
+        : 'Approve, deny, request more info',
+    location_requests: canOwner
+      ? 'Approve, deny, request info, remove locations'
+      : canSuper
+        ? 'Approve, deny, request info, remove locations'
+        : 'Approve, deny, request more info',
+    moderation: canOwner
+      ? 'Moderate, edit/remove content, manage admin roles'
+      : canSuper
+        ? 'Moderate, edit ratings/comments, remove content'
+        : 'Approve, deny, remove pending content'
+  };
+
   const categories = [
     ['all', 'All tasks'],
     ['business_requests', 'Business requests'],
@@ -58,7 +91,10 @@ const renderCategories = () => {
   $('adminCategories').innerHTML = categories
     .map(
       ([id, label]) =>
-        `<button type="button" class="item ${state.category === id ? 'active' : ''}" data-category="${id}"><div class="item-title">${label}</div></button>`
+        `<button type="button" class="item ${state.category === id ? 'active' : ''}" data-category="${id}">
+          <div class="item-title">${label}</div>
+          <div class="item-sub">${folderHints[id] || ''}</div>
+        </button>`
     )
     .join('');
 };
@@ -117,8 +153,65 @@ const renderTasks = () => {
     .join('');
 };
 
+const renderBusinessEditor = () => {
+  const panel = $('adminBusinessEditor');
+  if (!panel) return;
+  const b = state.selectedBusiness;
+  if (!b) {
+    panel.classList.add('hidden');
+    return;
+  }
+
+  panel.classList.remove('hidden');
+  $('adminBizId').value = b.id;
+  $('adminBizName').value = b.name || '';
+  $('adminBizOwnerName').value = b.owner_name || '';
+  $('adminBizDescription').value = b.description || '';
+  $('adminBizRemove').disabled = !canSuper();
+
+  $('adminBizLocations').innerHTML = (b.locations || []).length
+    ? b.locations
+        .map(
+          (loc) =>
+            `<article class="item"><div class="item-title">${loc.location_name || `${loc.city} location`}</div><div class="item-sub">${loc.address_line}, ${loc.city}, ${loc.country}</div>${canSuper() ? `<div class="actions"><button type="button" data-remove-location-id="${loc.id}">Remove Location</button></div>` : ''}</article>`
+        )
+        .join('')
+    : '<div class="muted">No locations found.</div>';
+};
+
+const renderBusinessResults = (items) => {
+  $('adminBusinessResults').innerHTML = !items.length
+    ? '<div class="muted">No businesses found.</div>'
+    : items
+        .map(
+          (b) =>
+            `<button type="button" class="item" data-business-id="${b.id}"><div class="item-title">${b.name}</div><div class="item-sub">Reviews: ${b.scores?.business_rating_count ?? 0}</div></button>`
+        )
+        .join('');
+};
+
+const searchBusinesses = async (q) => {
+  if (!q) {
+    $('adminBusinessResults').innerHTML = '';
+    return;
+  }
+  const data = await req(`/businesses?page=1&page_size=12&sort=name&q=${encodeURIComponent(q)}`);
+  renderBusinessResults(data?.data?.items || []);
+};
+
+const selectBusiness = async (businessId) => {
+  const data = await req(`/businesses/${businessId}`);
+  state.selectedBusiness = data.data;
+  renderBusinessEditor();
+};
+
 const renderDetail = () => {
   const t = state.selected;
+  const batchForm = $('adminImageBatchForm');
+  if (batchForm) batchForm.classList.add('hidden');
+  const roleForm = $('roleAssignForm');
+  if (roleForm) roleForm.classList.toggle('hidden', !canSuper());
+
   if (!t) {
     $('adminDetail').textContent = 'Select a task to view details.';
     $('adminActions').innerHTML = '';
@@ -127,8 +220,6 @@ const renderDetail = () => {
 
   $('adminDetail').innerHTML = `<div><strong>${t.title}</strong></div><pre class="out">${JSON.stringify(t.raw, null, 2)}</pre>`;
   const actions = [];
-  const batchForm = $('adminImageBatchForm');
-  if (batchForm) batchForm.classList.add('hidden');
 
   if (t.kind === 'appeal') {
     actions.push(`<button type="button" data-action="appeal_approve">Approve</button>`);
@@ -154,10 +245,6 @@ const renderDetail = () => {
     }
   }
 
-  if (tierRank(state.tier) >= 2) {
-    actions.push(`<button type="button" data-action="role_assign">Assign Role</button>`);
-  }
-
   $('adminActions').innerHTML = actions.join('');
 };
 
@@ -166,6 +253,7 @@ const loadMe = async () => {
   state.tier = me.data.tier;
   state.role = me.data.role;
   $('adminTierPill').textContent = `Tier: ${state.tier}`;
+  $('roleAssignForm')?.classList.toggle('hidden', !canSuper());
 };
 
 const loadInbox = async () => {
@@ -214,20 +302,6 @@ const handleAction = async (action) => {
   }
   if (action === 'remove_location' && t.raw.target_location_id) {
     await req(`/admin/locations/${t.raw.target_location_id}/remove`, { method: 'POST' });
-  }
-
-  if (action === 'role_assign') {
-    const emailQ = window.prompt('Enter user email to find:');
-    if (!emailQ) return;
-    const users = await req(`/admin/users?q=${encodeURIComponent(emailQ)}`);
-    const first = users.data?.[0];
-    if (!first) throw { error: { message: 'No matching user found' } };
-    const role = window.prompt('Assign role: consumer | business_owner | moderator | admin', first.role);
-    if (!role) return;
-    await req('/admin/roles/assign', {
-      method: 'POST',
-      body: JSON.stringify({ user_id: first.id, role })
-    });
   }
 
   showToast('ok', 'Action completed');
@@ -281,6 +355,95 @@ $('adminSearch').addEventListener('input', () => {
   }, 220);
 });
 
+$('adminBusinessSearch').addEventListener('input', () => {
+  clearTimeout(window.__adminBusinessSearchTimer);
+  window.__adminBusinessSearchTimer = setTimeout(() => {
+    searchBusinesses($('adminBusinessSearch').value.trim()).catch((err) =>
+      showToast('err', err?.error?.message || 'Business search failed')
+    );
+  }, 220);
+});
+
+$('adminBusinessResults').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-business-id]');
+  if (!btn) return;
+  try {
+    await selectBusiness(btn.dataset.businessId);
+  } catch (err) {
+    showToast('err', err?.error?.message || 'Failed to load business');
+  }
+});
+
+$('adminBizSave').addEventListener('click', async () => {
+  try {
+    if (!state.selectedBusiness) throw { error: { message: 'Select a business first.' } };
+    if (!canSuper()) throw { error: { message: 'Super admin required.' } };
+    await req(`/businesses/${state.selectedBusiness.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: $('adminBizName').value.trim() || undefined,
+        owner_name: $('adminBizOwnerName').value.trim() || undefined,
+        description: $('adminBizDescription').value.trim() || undefined
+      })
+    });
+    showToast('ok', 'Business updated');
+    await selectBusiness(state.selectedBusiness.id);
+  } catch (err) {
+    showToast('err', err?.error?.message || 'Failed to update business');
+  }
+});
+
+$('adminBizRemove').addEventListener('click', async () => {
+  try {
+    if (!state.selectedBusiness) throw { error: { message: 'Select a business first.' } };
+    if (!canSuper()) throw { error: { message: 'Super admin required.' } };
+    await req(`/admin/businesses/${state.selectedBusiness.id}/remove`, { method: 'POST' });
+    state.selectedBusiness = null;
+    renderBusinessEditor();
+    showToast('ok', 'Business removed');
+    await loadInbox();
+  } catch (err) {
+    showToast('err', err?.error?.message || 'Failed to remove business');
+  }
+});
+
+$('adminBizLocations').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-remove-location-id]');
+  if (!btn) return;
+  try {
+    if (!canSuper()) throw { error: { message: 'Super admin required.' } };
+    await req(`/admin/locations/${btn.dataset.removeLocationId}/remove`, { method: 'POST' });
+    showToast('ok', 'Location removed');
+    if (state.selectedBusiness) await selectBusiness(state.selectedBusiness.id);
+  } catch (err) {
+    showToast('err', err?.error?.message || 'Failed to remove location');
+  }
+});
+
+$('roleAssignForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    if (!canSuper()) throw { error: { message: 'Super admin required.' } };
+    const email = $('roleAssignEmail').value.trim();
+    const role = $('roleAssignValue').value;
+    if (!email) throw { error: { message: 'Email is required.' } };
+    if (!canOwner() && role === 'admin') {
+      throw { error: { message: 'Only owner can assign super_admin.' } };
+    }
+    const users = await req(`/admin/users?q=${encodeURIComponent(email)}`);
+    const exact = (users.data || []).find((u) => String(u.email || '').toLowerCase() === email.toLowerCase());
+    if (!exact) throw { error: { message: 'User not found.' } };
+    await req('/admin/roles/assign', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: exact.id, role })
+    });
+    showToast('ok', 'Role updated');
+    $('roleAssignEmail').value = '';
+  } catch (err) {
+    showToast('err', err?.error?.message || 'Role assignment failed');
+  }
+});
+
 $('adminLogout').addEventListener('click', () => {
   localStorage.removeItem('dir.token');
   window.location.href = './embed.html';
@@ -312,9 +475,21 @@ $('adminImageBatchForm').addEventListener('submit', async (e) => {
     return;
   }
   try {
+    const url = new URL(window.location.href);
+    const initialBusinessId = url.searchParams.get('businessId');
+    const initialQ = url.searchParams.get('q');
+    if (initialQ) {
+      state.q = initialQ;
+      $('adminSearch').value = initialQ;
+    }
     await loadMe();
     renderCategories();
     await loadInbox();
+    if (initialBusinessId) {
+      await selectBusiness(initialBusinessId);
+    } else if (initialQ) {
+      await searchBusinesses(initialQ);
+    }
   } catch (err) {
     showToast('err', err?.error?.message || 'Admin access required');
     setTimeout(() => {

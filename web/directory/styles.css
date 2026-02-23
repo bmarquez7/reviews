@@ -398,18 +398,51 @@ select {
 }
 
 .admin-layout {
-  grid-template-columns: 260px minmax(320px, 1fr) minmax(320px, 1fr);
+  grid-template-columns: 2fr 3fr;
+  align-items: start;
 }
 
-.admin-sidebar { grid-column: span 3; }
-.admin-list { grid-column: span 5; }
-.admin-detail { grid-column: span 4; }
+.admin-right-stack {
+  grid-column: 2;
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-sidebar {
+  grid-column: 1;
+  position: sticky;
+  top: 84px;
+}
+
+.admin-list,
+.admin-detail {
+  grid-column: auto;
+}
+
+.admin-business-tools {
+  margin-top: 0.9rem;
+  border-top: 1px solid #e5e8ef;
+  padding-top: 0.8rem;
+}
+
+#adminBusinessEditor {
+  margin-top: 0.7rem;
+  display: grid;
+  gap: 0.5rem;
+}
 
 @media (max-width: 1100px) {
+  .admin-layout {
+    grid-template-columns: 1fr;
+  }
+
   .admin-sidebar,
-  .admin-list,
-  .admin-detail {
+  .admin-right-stack {
     grid-column: span 12;
+  }
+
+  .admin-sidebar {
+    position: static;
   }
 }
 

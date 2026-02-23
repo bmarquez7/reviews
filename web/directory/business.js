@@ -60,6 +60,23 @@ const openImageLightbox = (url) => {
 
 const closeImageLightbox = () => $('imageLightbox').classList.add('hidden');
 
+const syncAdminLink = async () => {
+  const link = $('bizAdminLink');
+  if (!link) return;
+  if (!state.token) {
+    link.classList.add('hidden');
+    return;
+  }
+  try {
+    const me = await req('/users/me', { headers: authHeaders() });
+    const canAccess = me?.data?.role === 'admin' || me?.data?.role === 'moderator';
+    link.classList.toggle('hidden', !canAccess);
+    if (canAccess) link.href = `./admin.html?businessId=${businessId}`;
+  } catch {
+    link.classList.add('hidden');
+  }
+};
+
 const initProfileTabs = () => {
   const tabHost = $('profileTabs');
   if (!tabHost) return;
@@ -258,6 +275,7 @@ $('loginForm').addEventListener('submit', async (e) => {
     });
     state.token = data.data.access_token;
     localStorage.setItem('dir.token', state.token);
+    await syncAdminLink();
     showToast('ok', 'Logged in');
   } catch (err) {
     showToast('err', errMsg(err));
@@ -267,6 +285,7 @@ $('loginForm').addEventListener('submit', async (e) => {
 $('logout').addEventListener('click', () => {
   state.token = '';
   localStorage.removeItem('dir.token');
+  void syncAdminLink();
   showToast('ok', 'Logged out');
 });
 
@@ -357,6 +376,7 @@ document.addEventListener('click', (e) => {
   }
   try {
     await Promise.all([loadBusiness(), loadReviews()]);
+    await syncAdminLink();
   } catch (err) {
     $('bizHeaderMeta').textContent = errMsg(err);
   }

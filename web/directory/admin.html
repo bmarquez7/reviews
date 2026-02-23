@@ -26,34 +26,67 @@
         <div id="adminCategories" class="list small"></div>
       </section>
 
-      <section class="card admin-list">
-        <div class="row between center">
-          <h2>Tasks</h2>
-          <span id="adminTierPill" class="chip">Tier: -</span>
-        </div>
-        <div class="row gap-sm">
-          <input id="adminSearch" type="text" placeholder="Search requests..." />
-          <select id="adminStatusFilter">
-            <option value="all">All statuses</option>
-            <option value="submitted">Submitted</option>
-            <option value="under_review">Under review</option>
-            <option value="resolved">Resolved</option>
-            <option value="rejected">Rejected</option>
-          </select>
-        </div>
-        <div id="adminTaskList" class="list small"></div>
-      </section>
+      <div class="admin-right-stack">
+        <section class="card admin-list">
+          <div class="row between center">
+            <h2>Tasks</h2>
+            <span id="adminTierPill" class="chip">Tier: -</span>
+          </div>
+          <div class="row gap-sm">
+            <input id="adminSearch" type="text" placeholder="Search requests..." />
+            <select id="adminStatusFilter">
+              <option value="all">All statuses</option>
+              <option value="submitted">Submitted</option>
+              <option value="under_review">Under review</option>
+              <option value="resolved">Resolved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+          <div id="adminTaskList" class="list small"></div>
 
-      <section class="card admin-detail">
-        <h2>Task Detail</h2>
-        <div id="adminDetail" class="muted">Select a task to view details.</div>
-        <div id="adminActions" class="actions"></div>
-        <form id="adminImageBatchForm" class="grid2 hidden" style="margin-top:0.7rem;">
-          <input id="adminBatchBusinessId" type="text" placeholder="Business ID" readonly />
-          <input id="adminBatchImages" type="file" accept="image/*" multiple />
-          <button type="submit">Batch Upload Business Images</button>
-        </form>
-      </section>
+          <div class="admin-business-tools">
+            <h3>Business Task Search</h3>
+            <div class="row gap-sm">
+              <input id="adminBusinessSearch" type="text" placeholder="Search businesses for management tasks..." />
+            </div>
+            <div id="adminBusinessResults" class="list small"></div>
+            <div id="adminBusinessEditor" class="hidden">
+              <h3>Selected Business</h3>
+              <input id="adminBizId" type="text" readonly />
+              <input id="adminBizName" type="text" placeholder="Business name" />
+              <input id="adminBizOwnerName" type="text" placeholder="Owner name" />
+              <input id="adminBizDescription" type="text" placeholder="Description" />
+              <div class="actions">
+                <button id="adminBizSave" type="button">Save Business</button>
+                <button id="adminBizRemove" type="button">Remove Business</button>
+              </div>
+              <h3>Locations</h3>
+              <div id="adminBizLocations" class="list small"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card admin-detail">
+          <h2>Task Detail</h2>
+          <div id="adminDetail" class="muted">Select a task to view details.</div>
+          <div id="adminActions" class="actions"></div>
+          <form id="adminImageBatchForm" class="grid2 hidden" style="margin-top:0.7rem;">
+            <input id="adminBatchBusinessId" type="text" placeholder="Business ID" readonly />
+            <input id="adminBatchImages" type="file" accept="image/*" multiple />
+            <button type="submit">Batch Upload Business Images</button>
+          </form>
+          <form id="roleAssignForm" class="grid2 hidden" style="margin-top:0.7rem;">
+            <input id="roleAssignEmail" type="email" placeholder="User email" />
+            <select id="roleAssignValue">
+              <option value="consumer">consumer</option>
+              <option value="business_owner">business_owner</option>
+              <option value="moderator">admin</option>
+              <option value="admin">super_admin</option>
+            </select>
+            <button type="submit">Assign Role</button>
+          </form>
+        </section>
+      </div>
     </main>
 
     <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>

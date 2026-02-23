@@ -188,11 +188,22 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       let appeals = appealsRes.data ?? [];
       if (query.q) {
         const q = query.q.toLowerCase();
+        const businessMatches = await supabaseAdmin
+          .from('businesses')
+          .select('id,name')
+          .ilike('name', `%${query.q}%`)
+          .limit(50);
+        const matchedBusinessIds = new Set((businessMatches.data ?? []).map((row) => row.id));
+
         appeals = appeals.filter(
           (item) =>
             item.reason.toLowerCase().includes(q) ||
             item.details.toLowerCase().includes(q) ||
-            item.status.toLowerCase().includes(q)
+            item.status.toLowerCase().includes(q) ||
+            String(item.business_id ?? '').toLowerCase().includes(q) ||
+            String(item.target_business_id ?? '').toLowerCase().includes(q) ||
+            matchedBusinessIds.has(item.business_id) ||
+            (item.target_business_id ? matchedBusinessIds.has(item.target_business_id) : false)
         );
       }
 
