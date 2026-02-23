@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Directory Embed</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="embed-mode">
+    <header class="topbar compact-header">
+      <h1>Directory Reviews</h1>
+      <div class="api-base-wrap">
+        <input id="apiBase" type="text" value="" placeholder="https://your-api-host/v1" />
+        <button id="saveApiBase" type="button">Save</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="card directory-card">
+        <div class="row between center">
+          <h2>Businesses</h2>
+          <div class="actions compact">
+            <button id="loadBusinesses" type="button">Refresh</button>
+          </div>
+        </div>
+        <div class="row gap-sm">
+          <input id="businessSearch" type="text" placeholder="Search business name..." />
+        </div>
+        <div id="categoryChips" class="chips"></div>
+        <div id="businessesList" class="list"></div>
+      </section>
+
+      <section class="card business-card">
+        <h2>Business</h2>
+        <div id="businessDetail" class="muted">Pick a business.</div>
+        <h3>Locations</h3>
+        <div id="locationsList" class="list small"></div>
+      </section>
+
+      <section class="card location-card">
+        <h2>Location Reviews</h2>
+        <div id="selectedLocationMeta" class="muted">No location selected.</div>
+        <div id="locationScores" class="chips"></div>
+        <div class="row between center review-toolbar">
+          <div class="row gap-sm">
+            <label for="reviewSort" class="muted">Sort</label>
+            <select id="reviewSort">
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="longest">Longest</option>
+            </select>
+          </div>
+          <div class="row gap-sm">
+            <label for="reviewFilter" class="muted">Filter</label>
+            <select id="reviewFilter">
+              <option value="all">All</option>
+              <option value="with_reply">With reply</option>
+              <option value="no_reply">No reply</option>
+            </select>
+          </div>
+        </div>
+        <div id="reviewsFeed" class="review-feed">
+          <div class="muted">No location selected.</div>
+        </div>
+        <div class="review-pager row between center">
+          <button id="reviewsPrev" type="button">Previous</button>
+          <span id="reviewsPageInfo" class="muted">Page 1</span>
+          <button id="reviewsNext" type="button">Next</button>
+        </div>
+      </section>
+
+      <section class="card auth-card">
+        <h2>Leave a Review</h2>
+        <form id="loginForm" class="grid2">
+          <input id="email" type="email" placeholder="Email" required />
+          <input id="password" type="password" placeholder="Password" required />
+          <button type="submit">Login</button>
+        </form>
+        <div class="actions">
+          <button id="acceptPolicies" type="button">Accept Policies</button>
+          <button id="logout" type="button">Logout</button>
+        </div>
+        <div id="factorSliders" class="factor-grid"></div>
+        <form id="ratingForm" class="grid2">
+          <input id="commentText" type="text" placeholder="Comment (minimum 10 words)" required />
+          <button type="submit">Submit Rating + Comment</button>
+        </form>
+        <pre id="authOut" class="out"></pre>
+        <pre id="postOut" class="out"></pre>
+      </section>
+
+      <section class="card tools-card hidden">
+        <button id="loadMine" type="button"></button>
+        <form id="createBusinessForm"></form>
+        <form id="updateBusinessForm"></form>
+        <form id="createLocationForm"></form>
+        <form id="appealForm"></form>
+        <input id="bizName" />
+        <input id="bizOwnerName" />
+        <input id="bizDescription" />
+        <input id="editBizName" />
+        <input id="editBizDescription" />
+        <input id="locName" />
+        <input id="locAddress" />
+        <input id="locCity" />
+        <input id="locRegion" />
+        <input id="locCountry" value="Albania" />
+        <input id="appealReason" />
+        <input id="appealDetails" />
+        <pre id="toolsOut" class="out"></pre>
+      </section>
+
+      <section class="card theme-card">
+        <h2>Appearance</h2>
+        <div class="grid2">
+          <label>Brand color <input id="themeBrand" type="color" value="#0f6a4d" /></label>
+          <label>Background color <input id="themeBg" type="color" value="#f5f2eb" /></label>
+          <label>Card color <input id="themeCard" type="color" value="#fffdf7" /></label>
+          <label>Review icon URL <input id="themeIconUrl" type="text" value="./assets/new-roots-logo.png" /></label>
+          <button id="resetTheme" type="button">Reset Theme</button>
+          <button id="loadCategories" type="button">Load Categories</button>
+          <button id="loadMe" type="button">Load Profile</button>
+        </div>
+      </section>
+    </main>
+
+    <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

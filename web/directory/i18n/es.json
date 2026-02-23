@@ -1,0 +1,39 @@
+{
+  "ui": {
+    "anonymityNotice": "Se permiten nombres de pantalla, pero se desaconseja el anonimato. Escribe como si tu nombre estuviera adjunto. Los administradores pueden revisar los datos de la cuenta cuando sea necesario para moderación y seguridad.",
+    "commentGuidance": "Escribe sobre tu propia experiencia. Mantén un tono profesional y específico. Los desahogos emocionales, los insultos o los comentarios de oídas pueden ser eliminados.",
+    "businessReplyGuidance": "Responde de forma profesional y céntrate en hechos, soluciones y próximos pasos. Se eliminarán respuestas poco profesionales, ataques personales, amenazas o lenguaje discriminatorio.",
+    "minWordsNotice": "Los comentarios deben tener al menos 10 palabras.",
+    "ratingScaleNotice": "Las valoraciones usan una escala de 0 a 5. Se permiten medios puntos."
+  },
+  "popup": {
+    "title": "Antes de continuar",
+    "intro": "Este directorio es creado por la comunidad. Para mantenerlo útil y seguro, exigimos que quienes publiquen sigan estas reglas:",
+    "rule1Title": "Solo experiencias de primera mano",
+    "rule1Body": "Publica solo lo que te ocurrió personalmente.",
+    "rule2Title": "Sé profesional y específico",
+    "rule2Body": "No se permiten insultos, acoso, amenazas, discurso de odio ni contenido discriminatorio.",
+    "rule3Title": "No compartas información privada",
+    "rule3Body": "No compartas correos, teléfonos, domicilios ni datos identificativos de personas.",
+    "rule4Title": "Moderación y cumplimiento",
+    "rule4Body": "Podemos eliminar contenido que incumpla estas reglas y suspender cuentas por infracciones repetidas.",
+    "checkbox1": "Publicaré solo experiencias de primera mano.",
+    "checkbox2": "Mantendré mis comentarios profesionales y evitaré el acoso o el odio.",
+    "checkbox3": "Entiendo que mi contenido puede ser moderado o eliminado si viola la política.",
+    "primaryButton": "Acepto, continuar",
+    "secondaryButton": "Cancelar",
+    "policiesLink": "Leer las políticas completas"
+  },
+  "policies": {
+    "pageTitle": "Políticas de la comunidad y pautas para negocios",
+    "topSummary": "Este directorio existe para compartir experiencias prácticas y de primera mano de forma respetuosa. Las valoraciones y comentarios deben ser profesionales, específicos y basados en lo que te ocurrió. Eliminamos contenido odioso, acosador, privado o que no sea de primera mano.",
+    "toc": {
+      "terms": "Términos de uso",
+      "ratings": "Guía de valoraciones y comentarios",
+      "business": "Guía de perfiles y respuestas de negocios",
+      "moderation": "Política de moderación",
+      "appeals": "Proceso de apelación",
+      "privacy": "Resumen de privacidad"
+    }
+  }
+}

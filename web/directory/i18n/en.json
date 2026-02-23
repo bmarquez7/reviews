@@ -1,0 +1,39 @@
+{
+  "ui": {
+    "anonymityNotice": "Screen names are allowed, but anonymity is discouraged. Please write as if your name were attached. Administrators can review account details when needed for moderation and safety.",
+    "commentGuidance": "Write about your own experience. Keep it professional and specific. Emotional rants, insults, or hearsay may be removed.",
+    "businessReplyGuidance": "Reply professionally and focus on facts, fixes, and next steps. Unprofessional replies, personal attacks, threats, or discriminatory language will be removed.",
+    "minWordsNotice": "Comments must be at least 10 words.",
+    "ratingScaleNotice": "Ratings use a 0 to 5 scale. Half steps are allowed."
+  },
+  "popup": {
+    "title": "Before you continue",
+    "intro": "This directory is community powered. To keep it useful and safe, we require everyone who posts to follow these rules:",
+    "rule1Title": "Firsthand experiences only",
+    "rule1Body": "Post only what happened to you personally.",
+    "rule2Title": "Keep it professional and specific",
+    "rule2Body": "No insults, harassment, threats, hate speech, or discriminatory content.",
+    "rule3Title": "No private information",
+    "rule3Body": "Do not share emails, phone numbers, home addresses, or identifying details about individuals.",
+    "rule4Title": "Moderation and enforcement",
+    "rule4Body": "We may remove content that breaks these rules, and we may suspend accounts for repeated violations.",
+    "checkbox1": "I will post only firsthand experiences.",
+    "checkbox2": "I will keep my comments professional and avoid harassment or hate.",
+    "checkbox3": "I understand my content may be moderated or removed if it violates policy.",
+    "primaryButton": "I Agree, Continue",
+    "secondaryButton": "Cancel",
+    "policiesLink": "Read the full policies"
+  },
+  "policies": {
+    "pageTitle": "Community Policies and Business Guidelines",
+    "topSummary": "This directory is here to share practical, firsthand experiences in a respectful way. Ratings and comments should be professional, specific, and based on what happened to you personally. We remove content that is hateful, harassing, private, or not firsthand.",
+    "toc": {
+      "terms": "Terms of Use",
+      "ratings": "Ratings and Comment Guidelines",
+      "business": "Business Profile and Reply Guidelines",
+      "moderation": "Moderation Policy",
+      "appeals": "Appeals Process",
+      "privacy": "Privacy Summary"
+    }
+  }
+}

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Directory Explorer</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Directory Explorer</h1>
+      <div class="api-base-wrap">
+        <label for="apiBase">API</label>
+        <input id="apiBase" type="text" value="" placeholder="https://your-api-host/v1" />
+        <button id="saveApiBase" type="button">Save</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="card auth-card">
+        <h2>Account</h2>
+        <form id="loginForm" class="grid2">
+          <input id="email" type="email" placeholder="Email" required />
+          <input id="password" type="password" placeholder="Password" required />
+          <button type="submit">Login</button>
+        </form>
+        <div class="actions">
+          <button id="loadMe" type="button">Load Profile</button>
+          <button id="acceptPolicies" type="button">Accept Policies</button>
+          <button id="logout" type="button">Logout</button>
+        </div>
+        <pre id="authOut" class="out"></pre>
+      </section>
+
+      <section class="card directory-card">
+        <div class="row between center">
+          <h2>Businesses</h2>
+          <div class="actions compact">
+            <button id="loadCategories" type="button">Categories</button>
+            <button id="loadBusinesses" type="button">Refresh</button>
+          </div>
+        </div>
+        <div class="row gap-sm">
+          <input id="businessSearch" type="text" placeholder="Search business name..." />
+        </div>
+        <div id="categoryChips" class="chips"></div>
+        <div id="businessesList" class="list"></div>
+      </section>
+
+      <section class="card business-card">
+        <h2>Selected Business</h2>
+        <div id="businessDetail" class="muted">Pick a business from the list.</div>
+        <h3>Locations</h3>
+        <div id="locationsList" class="list small"></div>
+      </section>
+
+      <section class="card location-card">
+        <h2>Selected Location</h2>
+        <div id="selectedLocationMeta" class="muted">No location selected.</div>
+        <div id="locationScores" class="chips"></div>
+        <div class="row between center review-toolbar">
+          <div class="row gap-sm">
+            <label for="reviewSort" class="muted">Sort</label>
+            <select id="reviewSort">
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="longest">Longest</option>
+            </select>
+          </div>
+          <div class="row gap-sm">
+            <label for="reviewFilter" class="muted">Filter</label>
+            <select id="reviewFilter">
+              <option value="all">All reviews</option>
+              <option value="with_reply">With business reply</option>
+              <option value="no_reply">No business reply</option>
+            </select>
+          </div>
+        </div>
+        <div id="reviewsFeed" class="review-feed">
+          <div class="muted">No location selected.</div>
+        </div>
+        <div class="review-pager row between center">
+          <button id="reviewsPrev" type="button">Previous</button>
+          <span id="reviewsPageInfo" class="muted">Page 1</span>
+          <button id="reviewsNext" type="button">Next</button>
+        </div>
+      </section>
+
+      <section class="card rating-card">
+        <h2>Post Rating + Comment (Customer)</h2>
+        <p class="muted">Login only required for submit. Uses selected location from the business panel.</p>
+        <div id="factorSliders" class="factor-grid"></div>
+        <form id="ratingForm" class="grid2">
+          <input id="commentText" type="text" placeholder="Comment (minimum 10 words)" required />
+          <button type="submit">Submit Rating + Comment</button>
+        </form>
+        <pre id="postOut" class="out"></pre>
+      </section>
+
+      <section class="card tools-card">
+        <h2>Business Tools</h2>
+        <p class="muted">Login required for create/update/dispute actions.</p>
+        <div class="actions">
+          <button id="loadMine" type="button">Load My Businesses</button>
+        </div>
+
+        <h3>Create Business</h3>
+        <form id="createBusinessForm" class="grid2">
+          <input id="bizName" placeholder="Business name" required />
+          <input id="bizOwnerName" placeholder="Owner name" required />
+          <input id="bizDescription" placeholder="Description" />
+          <button type="submit">Create Business</button>
+        </form>
+
+        <h3>Update Selected Business</h3>
+        <form id="updateBusinessForm" class="grid2">
+          <input id="editBizName" placeholder="New business name" />
+          <input id="editBizDescription" placeholder="New description" />
+          <button type="submit">Update Selected Business</button>
+        </form>
+
+        <h3>Create Location For Selected Business</h3>
+        <form id="createLocationForm" class="grid2">
+          <input id="locName" placeholder="Location name" />
+          <input id="locAddress" placeholder="Address line" required />
+          <input id="locCity" placeholder="City" required />
+          <input id="locRegion" placeholder="Region" />
+          <input id="locCountry" placeholder="Country" value="Albania" required />
+          <button type="submit">Create Location</button>
+        </form>
+
+        <h3>Dispute (Appeal) Selected Location</h3>
+        <form id="appealForm" class="grid2">
+          <input id="appealReason" placeholder="Reason" required />
+          <input id="appealDetails" placeholder="Details" required />
+          <button type="submit">Submit Appeal</button>
+        </form>
+        <pre id="toolsOut" class="out"></pre>
+      </section>
+
+      <section class="card theme-card">
+        <h2>Appearance</h2>
+        <div class="grid2">
+          <label>Brand color <input id="themeBrand" type="color" value="#0f6a4d" /></label>
+          <label>Background color <input id="themeBg" type="color" value="#f5f2eb" /></label>
+          <label>Card color <input id="themeCard" type="color" value="#fffdf7" /></label>
+          <label>Review icon URL <input id="themeIconUrl" type="text" value="./assets/new-roots-logo.png" /></label>
+          <button id="resetTheme" type="button">Reset Theme</button>
+        </div>
+      </section>
+    </main>
+
+    <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

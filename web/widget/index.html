@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tirana Events Calendar</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <section class="hero">
+        <h1 id="hero-title">Tirana Events Calendar</h1>
+        <p id="hero-subtitle">
+          Discover culture, community, and nightlife across Tirana. Filter by area, type, language, date, and price.
+        </p>
+        <div class="controls" id="filter-controls"></div>
+      </section>
+
+      <section class="grid-two">
+        <div>
+          <div class="admin-bar" style="margin-bottom: 12px;">
+            <span class="badge" id="results-count">0 events</span>
+            <button class="secondary" id="reset-filters">Reset filters</button>
+          </div>
+          <div class="admin-bar" id="view-controls" style="margin-bottom: 12px;">
+            <button class="secondary toggle-button" data-view="list">List</button>
+            <button class="secondary toggle-button" data-view="month">Month</button>
+            <button class="secondary toggle-button" data-view="week">Week</button>
+          </div>
+          <div id="calendar-view"></div>
+          <div class="cards" id="event-list"></div>
+        </div>
+        <aside class="form-card">
+          <h2 id="submit-title">Submit an event</h2>
+          <p class="small" id="submit-subtitle">Submissions are reviewed before going live.</p>
+          <form id="submit-form">
+            <input required name="title" placeholder="Event title" />
+            <textarea required name="description" placeholder="Short description"></textarea>
+            <input required name="location" placeholder="Venue or address" />
+            <select name="event_type" required></select>
+            <select name="area" required></select>
+            <select name="event_language" multiple required></select>
+            <div class="grid-two">
+              <input type="datetime-local" name="date_start" required />
+              <input type="datetime-local" name="date_end" required />
+            </div>
+            <div class="grid-two">
+              <select name="repeat_frequency" required>
+                <option value="none">No repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+              <input type="date" name="repeat_until" />
+            </div>
+            <div class="grid-two">
+              <select name="price_type" required></select>
+              <input required type="number" name="price_min" step="0.01" placeholder="Min price (ALL)" />
+            </div>
+            <input required type="number" name="price_max" step="0.01" placeholder="Max price (ALL)" />
+            <input required type="url" name="ticket_url" placeholder="Ticket or RSVP link" />
+            <input type="url" name="event_image_url" placeholder="Event image or poster URL (optional)" />
+            <input type="file" name="event_image_file" accept="image/*" />
+            <input required type="text" name="organizer_name" placeholder="Organizer name" />
+            <input required type="email" name="organizer_email" placeholder="Organizer email" />
+            <input required type="text" name="submitter_name" placeholder="Your name" />
+            <input required type="email" name="submitter_email" placeholder="Your email" />
+            <textarea required name="submitter_note" placeholder="Anything we should know?"></textarea>
+            <button type="submit">Submit for approval</button>
+            <div class="notice" id="submit-status" style="display:none;"></div>
+          </form>
+        </aside>
+      </section>
+    </div>
+    <div id="event-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-backdrop" data-close-modal="true"></div>
+      <div class="modal-content">
+        <button type="button" class="modal-close secondary" id="modal-close">Close</button>
+        <div id="modal-body"></div>
+      </div>
+    </div>
+
+    <script type="module" src="../shared/vendor.js"></script>
+    <script type="module" src="./widget.js"></script>
+  </body>
+</html>

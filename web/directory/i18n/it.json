@@ -1,0 +1,39 @@
+{
+  "ui": {
+    "anonymityNotice": "Sono consentiti i nomi schermo, ma l’anonimato è sconsigliato. Scrivi come se il tuo nome fosse visibile. Gli amministratori possono verificare i dati dell’account quando necessario per moderazione e sicurezza.",
+    "commentGuidance": "Scrivi della tua esperienza personale. Mantieni un tono professionale e specifico. Sfoghi emotivi, insulti o commenti per sentito dire possono essere rimossi.",
+    "businessReplyGuidance": "Rispondi in modo professionale e concentrati su fatti, soluzioni e prossimi passi. Risposte non professionali, attacchi personali, minacce o linguaggio discriminatorio saranno rimossi.",
+    "minWordsNotice": "I commenti devono avere almeno 10 parole.",
+    "ratingScaleNotice": "Le valutazioni usano una scala da 0 a 5. Sono consentiti i mezzi punti."
+  },
+  "popup": {
+    "title": "Prima di continuare",
+    "intro": "Questo elenco è gestito dalla comunità. Per mantenerlo utile e sicuro, chiediamo a chi pubblica di seguire queste regole:",
+    "rule1Title": "Solo esperienze dirette",
+    "rule1Body": "Pubblica solo ciò che ti è accaduto personalmente.",
+    "rule2Title": "Tono professionale e specifico",
+    "rule2Body": "Niente insulti, molestie, minacce, incitamento all’odio o contenuti discriminatori.",
+    "rule3Title": "Nessuna informazione privata",
+    "rule3Body": "Non condividere e mail, numeri di telefono, indirizzi di casa o dettagli identificativi su persone.",
+    "rule4Title": "Moderazione e applicazione",
+    "rule4Body": "Possiamo rimuovere contenuti che violano queste regole e sospendere account in caso di violazioni ripetute.",
+    "checkbox1": "Pubblicherò solo esperienze dirette.",
+    "checkbox2": "Terrò i miei commenti professionali ed eviterò molestie o odio.",
+    "checkbox3": "Capisco che i miei contenuti possono essere moderati o rimossi se violano la policy.",
+    "primaryButton": "Accetto, continua",
+    "secondaryButton": "Annulla",
+    "policiesLink": "Leggi le policy complete"
+  },
+  "policies": {
+    "pageTitle": "Policy della community e linee guida per le attività",
+    "topSummary": "Questo elenco serve a condividere esperienze pratiche e dirette in modo rispettoso. Valutazioni e commenti devono essere professionali, specifici e basati su ciò che ti è accaduto. Rimuoviamo contenuti d’odio, molestie, privati o non basati su esperienza diretta.",
+    "toc": {
+      "terms": "Termini di utilizzo",
+      "ratings": "Linee guida per valutazioni e commenti",
+      "business": "Linee guida per profili e risposte delle attività",
+      "moderation": "Policy di moderazione",
+      "appeals": "Procedura di ricorso",
+      "privacy": "Riepilogo privacy"
+    }
+  }
+}

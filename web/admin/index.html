@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tirana Events Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <div id="login-gate" class="app admin-login-shell">
+      <section>
+        <div class="form-card" style="max-width: 420px;">
+          <h2>Admin sign in</h2>
+          <form id="login-form">
+            <input type="email" name="email" placeholder="Email" required />
+            <input type="password" name="password" placeholder="Password" required />
+            <button type="submit">Sign in</button>
+          </form>
+          <div class="notice" id="login-status" style="display:none;"></div>
+        </div>
+      </section>
+    </div>
+
+    <div id="protected-app" class="app hidden">
+      <section class="hero">
+        <h1>Tirana Events Admin</h1>
+        <p>Approve submissions, edit events, and publish updates.</p>
+      </section>
+
+      <section id="admin-tools">
+        <section class="grid-two">
+          <div class="form-card">
+            <h2>Edit event</h2>
+            <div class="admin-bar" style="margin-bottom: 10px;">
+              <button class="secondary" id="new-event">Create new event</button>
+              <button class="secondary" id="logout">Sign out</button>
+            </div>
+            <form id="edit-form">
+              <input name="title_en" placeholder="Title (English)" />
+              <input name="title_es" placeholder="Title (Spanish)" />
+              <input name="title_sq" placeholder="Title (Albanian)" />
+              <textarea name="description_en" placeholder="Description (English)"></textarea>
+              <textarea name="description_es" placeholder="Description (Spanish)"></textarea>
+              <textarea name="description_sq" placeholder="Description (Albanian)"></textarea>
+              <input name="location_en" placeholder="Location (English)" />
+              <input name="location_es" placeholder="Location (Spanish)" />
+              <input name="location_sq" placeholder="Location (Albanian)" />
+              <input name="event_type" placeholder="Event type" />
+              <input name="area" placeholder="Area" />
+              <input name="event_language" placeholder="Event language codes (comma)" />
+              <div class="grid-two">
+                <input type="datetime-local" name="date_start" />
+                <input type="datetime-local" name="date_end" />
+              </div>
+              <div class="grid-two">
+                <select name="repeat_frequency">
+                  <option value="none">No repeat</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+                <input type="date" name="repeat_until" placeholder="Repeat until" />
+              </div>
+              <input name="status" placeholder="Status (approved | pending)" />
+              <div class="grid-two">
+                <input name="price_type" placeholder="Price type" />
+                <input type="number" step="0.01" name="price_min" placeholder="Min price" />
+              </div>
+              <input type="number" step="0.01" name="price_max" placeholder="Max price" />
+              <input name="currency" placeholder="Currency" />
+              <input name="ticket_url" placeholder="Ticket URL" />
+              <input type="url" name="event_image_url" placeholder="Event image/poster URL" />
+              <input type="file" name="event_image_file" accept="image/*" />
+              <button type="submit">Save changes</button>
+              <div class="notice" id="edit-status" style="display:none;"></div>
+            </form>
+          </div>
+
+          <div class="form-card">
+            <h2>Batch add events</h2>
+            <p class="small">
+              One event per line, pipe-separated:
+              <br />
+              title | description | location | type | area | date_start | date_end | languages | price_type | price_min | price_max | status | ticket_url | event_image_url
+            </p>
+            <p class="small">Date format: 2026-03-05T19:00</p>
+            <form id="batch-form">
+              <textarea
+                name="batch_rows"
+                rows="10"
+                placeholder="Jazz Night | Live trio performance | Hemingway Bar | Music | Blloku (The Block) | 2026-03-05T19:00 | 2026-03-05T22:00 | en,sq | Paid | 1000 | 2500 | pending | https://example.com/tickets | https://example.com/poster.jpg"
+                required
+              ></textarea>
+              <button type="submit">Batch insert</button>
+              <div class="notice" id="batch-status" style="display:none;"></div>
+            </form>
+          </div>
+        </section>
+
+        <section>
+          <div class="admin-bar">
+            <span class="badge" id="admin-count">0 events</span>
+            <button class="secondary" id="refresh">Refresh</button>
+          </div>
+          <table class="table" id="admin-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Area</th>
+                <th>Type</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+      </section>
+    </div>
+
+    <script type="module" src="../shared/vendor.js"></script>
+    <script type="module" src="./admin.js"></script>
+  </body>
+</html>

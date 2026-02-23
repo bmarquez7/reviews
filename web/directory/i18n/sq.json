@@ -1,0 +1,39 @@
+{
+  "ui": {
+    "anonymityNotice": "Lejohen emrat e ekranit, por anonimiteti nuk rekomandohet. Shkruani sikur emri juaj të ishte i bashkangjitur. Administratorët mund të shqyrtojnë të dhënat e llogarisë kur është e nevojshme për moderim dhe siguri.",
+    "commentGuidance": "Shkruani për përvojën tuaj personale. Mbajeni profesionale dhe specifike. Shfryrjet emocionale, fyerjet ose dëshmitë me të dëgjuar mund të hiqen.",
+    "businessReplyGuidance": "Përgjigjuni në mënyrë profesionale dhe përqendrohuni te faktet, zgjidhjet dhe hapat e radhës. Përgjigjet joprofesionale, sulmet personale, kërcënimet ose gjuha diskriminuese do të hiqen.",
+    "minWordsNotice": "Komentet duhet të kenë të paktën 10 fjalë.",
+    "ratingScaleNotice": "Vlerësimet përdorin shkallën 0 deri në 5. Lejohen gjysmë pikë."
+  },
+  "popup": {
+    "title": "Para se të vazhdoni",
+    "intro": "Ky direktorium mbahet nga komuniteti. Për ta mbajtur të dobishëm dhe të sigurt, kërkojmë që kushdo që poston të ndjekë këto rregulla:",
+    "rule1Title": "Vetëm përvoja nga dora e parë",
+    "rule1Body": "Postoni vetëm atë që ju ka ndodhur personalisht.",
+    "rule2Title": "Mbajeni profesionale dhe specifike",
+    "rule2Body": "Nuk lejohen fyerje, ngacmime, kërcënime, gjuhë urrejtjeje ose përmbajtje diskriminuese.",
+    "rule3Title": "Pa informacion privat",
+    "rule3Body": "Mos ndani e mail, numra telefoni, adresa banimi ose detaje identifikuese për persona.",
+    "rule4Title": "Moderim dhe zbatim",
+    "rule4Body": "Ne mund të heqim përmbajtje që shkel këto rregulla dhe të pezullojmë llogaritë për shkelje të përsëritura.",
+    "checkbox1": "Do të postoj vetëm përvoja nga dora e parë.",
+    "checkbox2": "Do t’i mbaj komentet profesionale dhe do të shmang ngacmimet ose urrejtjen.",
+    "checkbox3": "E kuptoj që përmbajtja ime mund të moderohet ose hiqet nëse shkel politikën.",
+    "primaryButton": "Pranoj, vazhdo",
+    "secondaryButton": "Anulo",
+    "policiesLink": "Lexo politikat e plota"
+  },
+  "policies": {
+    "pageTitle": "Politikat e komunitetit dhe udhëzimet për bizneset",
+    "topSummary": "Ky direktorium është për të ndarë përvoja praktike dhe nga dora e parë në mënyrë të respektueshme. Vlerësimet dhe komentet duhet të jenë profesionale, specifike dhe të bazuara në atë që ju ka ndodhur. Ne heqim përmbajtje urrejtjeje, ngacmuese, private ose jo nga dora e parë.",
+    "toc": {
+      "terms": "Kushtet e përdorimit",
+      "ratings": "Udhëzime për vlerësimet dhe komentet",
+      "business": "Udhëzime për profilet dhe përgjigjet e bizneseve",
+      "moderation": "Politika e moderimit",
+      "appeals": "Procesi i ankesave",
+      "privacy": "Përmbledhje e privatësisë"
+    }
+  }
+}

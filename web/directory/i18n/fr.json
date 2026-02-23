@@ -1,0 +1,39 @@
+{
+  "ui": {
+    "anonymityNotice": "Les pseudonymes sont autorisés, mais l’anonymat est déconseillé. Écrivez comme si votre nom était affiché. Les administrateurs peuvent consulter les informations du compte si nécessaire pour la modération et la sécurité.",
+    "commentGuidance": "Décrivez votre propre expérience. Restez professionnel et précis. Les messages émotionnels, les insultes ou les propos rapportés peuvent être supprimés.",
+    "businessReplyGuidance": "Répondez de manière professionnelle et concentrez vous sur les faits, les solutions et les prochaines étapes. Les réponses non professionnelles, attaques personnelles, menaces ou propos discriminatoires seront supprimés.",
+    "minWordsNotice": "Les commentaires doivent contenir au moins 10 mots.",
+    "ratingScaleNotice": "Les notes utilisent une échelle de 0 à 5. Les demi points sont autorisés."
+  },
+  "popup": {
+    "title": "Avant de continuer",
+    "intro": "Cet annuaire est alimenté par la communauté. Pour le garder utile et sûr, toute personne qui publie doit respecter ces règles :",
+    "rule1Title": "Expériences de première main uniquement",
+    "rule1Body": "Publiez uniquement ce qui vous est arrivé personnellement.",
+    "rule2Title": "Restez professionnel et précis",
+    "rule2Body": "Pas d’insultes, de harcèlement, de menaces, de discours de haine ou de contenu discriminatoire.",
+    "rule3Title": "Aucune information privée",
+    "rule3Body": "Ne partagez pas d’e mails, de numéros de téléphone, d’adresses domiciliaires ou d’informations permettant d’identifier des personnes.",
+    "rule4Title": "Modération et application",
+    "rule4Body": "Nous pouvons supprimer le contenu qui enfreint ces règles et suspendre les comptes en cas d’infractions répétées.",
+    "checkbox1": "Je publierai uniquement des expériences de première main.",
+    "checkbox2": "Je garderai mes commentaires professionnels et j’éviterai le harcèlement ou la haine.",
+    "checkbox3": "Je comprends que mon contenu peut être modéré ou supprimé s’il enfreint la politique.",
+    "primaryButton": "J’accepte, continuer",
+    "secondaryButton": "Annuler",
+    "policiesLink": "Lire les politiques complètes"
+  },
+  "policies": {
+    "pageTitle": "Politiques de la communauté et règles pour les entreprises",
+    "topSummary": "Cet annuaire existe pour partager des expériences pratiques et de première main de manière respectueuse. Les notes et commentaires doivent être professionnels, précis et basés sur ce qui vous est arrivé. Nous supprimons les contenus haineux, harcelants, privés ou non fondés sur une expérience directe.",
+    "toc": {
+      "terms": "Conditions d’utilisation",
+      "ratings": "Règles pour les notes et commentaires",
+      "business": "Règles pour les profils et réponses des entreprises",
+      "moderation": "Politique de modération",
+      "appeals": "Procédure d’appel",
+      "privacy": "Résumé de confidentialité"
+    }
+  }
+}

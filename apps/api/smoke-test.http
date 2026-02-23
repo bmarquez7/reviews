@@ -1,0 +1,8 @@
+### Health
+GET http://localhost:4000/v1/health
+
+### Languages
+GET http://localhost:4000/v1/i18n/languages
+
+### Categories
+GET http://localhost:4000/v1/categories

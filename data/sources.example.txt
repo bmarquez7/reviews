@@ -1,0 +1,4 @@
+# One URL per line. Supports RSS/Atom and ICS feeds.
+# Example:
+# https://example.com/events.rss
+# https://example.com/calendar.ics
