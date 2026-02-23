@@ -34,6 +34,17 @@ const req = async (path, options = {}) => {
   return json;
 };
 
+const reqForm = async (path, formData) => {
+  const res = await fetch(`${apiBase}${path}`, {
+    method: 'POST',
+    body: formData,
+    headers: state.token ? { Authorization: `Bearer ${state.token}` } : {}
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw json;
+  return json;
+};
+
 const tierRank = (tier) => (tier === 'owner' ? 3 : tier === 'super_admin' ? 2 : tier === 'admin' ? 1 : 0);
 
 const renderCategories = () => {
@@ -116,6 +127,8 @@ const renderDetail = () => {
 
   $('adminDetail').innerHTML = `<div><strong>${t.title}</strong></div><pre class="out">${JSON.stringify(t.raw, null, 2)}</pre>`;
   const actions = [];
+  const batchForm = $('adminImageBatchForm');
+  if (batchForm) batchForm.classList.add('hidden');
 
   if (t.kind === 'appeal') {
     actions.push(`<button type="button" data-action="appeal_approve">Approve</button>`);
@@ -124,6 +137,10 @@ const renderDetail = () => {
     if (tierRank(state.tier) >= 2) {
       if (t.raw.target_business_id) actions.push(`<button type="button" data-action="remove_business">Remove Business</button>`);
       if (t.raw.target_location_id) actions.push(`<button type="button" data-action="remove_location">Remove Location</button>`);
+      if (t.raw.target_business_id && batchForm) {
+        batchForm.classList.remove('hidden');
+        $('adminBatchBusinessId').value = t.raw.target_business_id;
+      }
     }
   }
 
@@ -267,6 +284,26 @@ $('adminSearch').addEventListener('input', () => {
 $('adminLogout').addEventListener('click', () => {
   localStorage.removeItem('dir.token');
   window.location.href = './embed.html';
+});
+
+$('adminImageBatchForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    if (tierRank(state.tier) < 2) throw { error: { message: 'Super admin required' } };
+    const businessId = $('adminBatchBusinessId').value.trim();
+    if (!businessId) throw { error: { message: 'Select a business-related task first.' } };
+    const files = Array.from($('adminBatchImages').files || []);
+    if (!files.length) throw { error: { message: 'Choose one or more images.' } };
+    for (const file of files) {
+      const form = new FormData();
+      form.append('file', file);
+      await reqForm(`/media/businesses/${businessId}/images`, form);
+    }
+    $('adminBatchImages').value = '';
+    showToast('ok', `Uploaded ${files.length} image(s)`);
+  } catch (err) {
+    showToast('err', err?.error?.message || 'Batch upload failed');
+  }
 });
 
 (async () => {

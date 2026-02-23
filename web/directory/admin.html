@@ -48,6 +48,11 @@
         <h2>Task Detail</h2>
         <div id="adminDetail" class="muted">Select a task to view details.</div>
         <div id="adminActions" class="actions"></div>
+        <form id="adminImageBatchForm" class="grid2 hidden" style="margin-top:0.7rem;">
+          <input id="adminBatchBusinessId" type="text" placeholder="Business ID" readonly />
+          <input id="adminBatchImages" type="file" accept="image/*" multiple />
+          <button type="submit">Batch Upload Business Images</button>
+        </form>
       </section>
     </main>
 
