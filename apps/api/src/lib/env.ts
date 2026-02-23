@@ -10,7 +10,7 @@ const EnvSchema = z.object({
   SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   DEFAULT_POLICIES_VERSION: z.string().min(1).default('2026-02-17'),
-  OWNER_EMAILS: z.string().default('')
+  OWNER_EMAILS: z.string().default('brandon@elsewhere-co.com')
 });
 
 export const env = EnvSchema.parse(process.env);

@@ -82,6 +82,15 @@ button:hover { filter: brightness(1.05); }
 .alpha-chips {
   margin-top: 0.3rem;
 }
+.auth-inline-msg {
+  margin-top: 0.55rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #e1b8b8;
+  background: #fff0f0;
+  color: #8e2020;
+  font-size: 0.9rem;
+}
 
 .list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.6rem; margin-top: 0.7rem; }
 .list.small { grid-template-columns: 1fr; }

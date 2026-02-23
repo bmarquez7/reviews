@@ -43,6 +43,7 @@ const state = {
   businessSearchDebounce: null,
   suggestionDebounce: null,
   alphaFilter: null,
+  authPending: false,
   reviewSort: "newest",
   reviewFilter: "all",
   reviewPage: 1,
@@ -135,8 +136,40 @@ const ensureOverlays = () => {
 const closeBusinessModal = () => $('businessModal')?.classList.add('hidden');
 const openBusinessModal = () => $('businessModal')?.classList.remove('hidden');
 const closeImageLightbox = () => $('imageLightbox')?.classList.add('hidden');
-const closeAuthModal = () => $('authModal')?.classList.add('hidden');
-const openAuthModal = () => $('authModal')?.classList.remove('hidden');
+const setAuthModalMessage = (message = '', type = 'err') => {
+  const el = $('authModalError');
+  if (!el) return;
+  if (!message) {
+    el.textContent = '';
+    el.classList.add('hidden');
+    return;
+  }
+  el.textContent = message;
+  el.classList.remove('hidden');
+  el.style.borderColor = type === 'ok' ? '#b9dec6' : '#e1b8b8';
+  el.style.background = type === 'ok' ? '#edf8f1' : '#fff0f0';
+  el.style.color = type === 'ok' ? '#1f6938' : '#8e2020';
+};
+const setAuthModalPending = (pending) => {
+  state.authPending = pending;
+  ['modalLoginForm', 'modalSignupForm'].forEach((formId) => {
+    const form = $(formId);
+    if (!form) return;
+    form.querySelectorAll('button, input').forEach((node) => {
+      node.disabled = pending;
+    });
+  });
+};
+const closeAuthModal = () => {
+  $('authModal')?.classList.add('hidden');
+  setAuthModalPending(false);
+  setAuthModalMessage('');
+};
+const openAuthModal = () => {
+  $('authModal')?.classList.remove('hidden');
+  setAuthModalPending(false);
+  setAuthModalMessage('');
+};
 const openImageLightbox = (url) => {
   const img = $('imageLightboxImg');
   if (!img || !url) return;
@@ -618,12 +651,18 @@ const modalLoginForm = $('modalLoginForm');
 if (modalLoginForm) {
   modalLoginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (state.authPending) return;
     try {
+      setAuthModalPending(true);
+      setAuthModalMessage('Signing in...', 'ok');
       await doLogin($('modalEmail').value, $('modalPassword').value);
+      setAuthModalMessage('Signed in successfully.', 'ok');
       closeAuthModal();
     } catch (err) {
       setOut('authOut', err);
-      showToast('err', errMsg(err));
+      setAuthModalMessage(errMsg(err), 'err');
+    } finally {
+      setAuthModalPending(false);
     }
   });
 }
@@ -632,7 +671,10 @@ const modalSignupForm = $('modalSignupForm');
 if (modalSignupForm) {
   modalSignupForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (state.authPending) return;
     try {
+      setAuthModalPending(true);
+      setAuthModalMessage('Creating account...', 'ok');
       await doSignup({
         email: $('modalSignupEmail').value.trim(),
         password: $('modalSignupPassword').value,
@@ -642,9 +684,12 @@ if (modalSignupForm) {
         age: Number($('modalSignupAge').value),
         screen_name: $('modalSignupScreenName').value.trim() || undefined
       });
+      setAuthModalMessage('Account created. Check email to verify, then login.', 'ok');
     } catch (err) {
       setOut('authOut', err);
-      showToast('err', errMsg(err));
+      setAuthModalMessage(errMsg(err), 'err');
+    } finally {
+      setAuthModalPending(false);
     }
   });
 }
