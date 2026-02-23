@@ -47,6 +47,10 @@ const appealSchema = z.object({
   details: z.string().min(1)
 });
 
+const claimRequestSchema = z.object({
+  message: z.string().min(10).max(2000).optional()
+});
+
 const assertBusinessOwner = async (userId: string, businessId: string) => {
   const businessRes = await supabaseAdmin
     .from('businesses')
@@ -64,6 +68,94 @@ const assertBusinessOwner = async (userId: string, businessId: string) => {
 };
 
 export const businessRoutes: FastifyPluginAsync = async (app) => {
+  app.post(
+    '/businesses/:businessId/claim-request',
+    {
+      schema: {
+        summary: 'Submit a request to claim an existing business',
+        tags: ['Business'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['businessId'],
+          properties: {
+            businessId: { type: 'string', format: 'uuid' }
+          }
+        },
+        body: {
+          type: 'object',
+          properties: {
+            message: { type: 'string', minLength: 10, maxLength: 2000 }
+          }
+        }
+      }
+    },
+    async (request) => {
+      const user = await requirePoliciesAccepted(request);
+      const params = z.object({ businessId: z.string().uuid() }).parse(request.params);
+      const body = claimRequestSchema.parse(request.body ?? {});
+
+      const business = await supabaseAdmin
+        .from('businesses')
+        .select('id,name,owner_user_id,is_claimed,status')
+        .eq('id', params.businessId)
+        .single();
+
+      if (business.error || !business.data || business.data.status !== 'active') {
+        throw new ApiError(404, 'NOT_FOUND', 'Business not found');
+      }
+
+      if (business.data.is_claimed && business.data.owner_user_id && business.data.owner_user_id !== user.id) {
+        throw new ApiError(409, 'ALREADY_CLAIMED', 'This business is already claimed');
+      }
+
+      if (business.data.owner_user_id === user.id) {
+        return { data: { status: 'already_owner' } };
+      }
+
+      const existingOpen = await supabaseAdmin
+        .from('appeals')
+        .select('id,status')
+        .eq('target_type', 'business')
+        .eq('target_business_id', params.businessId)
+        .eq('reason', 'claim_request')
+        .in('status', ['submitted', 'under_review'])
+        .limit(1)
+        .maybeSingle();
+
+      if (existingOpen.error) {
+        throw new ApiError(500, 'INTERNAL_ERROR', existingOpen.error.message);
+      }
+
+      if (existingOpen.data) {
+        throw new ApiError(409, 'CLAIM_REQUEST_OPEN', 'A claim request is already open for this business');
+      }
+
+      const created = await supabaseAdmin
+        .from('appeals')
+        .insert({
+          business_id: params.businessId,
+          target_type: 'business',
+          target_business_id: params.businessId,
+          target_location_id: null,
+          submitted_by: user.id,
+          reason: 'claim_request',
+          details:
+            body.message ??
+            'Business claim request submitted by user. Please verify ownership before approval.',
+          status: 'submitted'
+        })
+        .select('id,status')
+        .single();
+
+      if (created.error || !created.data) {
+        throw new ApiError(422, 'VALIDATION_ERROR', created.error?.message ?? 'Unable to submit claim request');
+      }
+
+      return { data: { appeal_id: created.data.id, status: created.data.status } };
+    }
+  );
+
   app.get(
     '/businesses/mine',
     {

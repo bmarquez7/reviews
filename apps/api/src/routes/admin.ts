@@ -268,6 +268,30 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       throw new ApiError(404, 'NOT_FOUND', 'Appeal not found');
     }
 
+    if (body.status === 'resolved') {
+      const appeal = await supabaseAdmin
+        .from('appeals')
+        .select('id,reason,target_type,target_business_id,submitted_by')
+        .eq('id', params.appealId)
+        .single();
+
+      if (!appeal.error && appeal.data?.reason === 'claim_request' && appeal.data.target_type === 'business' && appeal.data.target_business_id) {
+        await supabaseAdmin
+          .from('businesses')
+          .update({
+            owner_user_id: appeal.data.submitted_by,
+            is_claimed: true
+          })
+          .eq('id', appeal.data.target_business_id);
+
+        await supabaseAdmin
+          .from('users')
+          .update({ role: 'business_owner' })
+          .eq('id', appeal.data.submitted_by)
+          .neq('role', 'admin');
+      }
+    }
+
     await supabaseAdmin.from('moderation_actions').insert({
       actor_user_id: actor.id,
       target_type: 'appeal',

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Business Profile</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="business-page">
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-logo" src="./assets/new-roots-logo.png" alt="New Roots Albania" />
+        <h1 id="bizPageTitle">Business</h1>
+      </div>
+      <div class="actions">
+        <a href="./embed.html" class="chip link-chip">Back to Directory</a>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="card profile-hero">
+        <div id="bizHeaderMeta" class="muted">Loading business...</div>
+        <div id="bizGallery" class="media-grid hero-grid"></div>
+      </section>
+
+      <section class="card profile-left">
+        <h2>Business Info</h2>
+        <div id="bizInfo"></div>
+        <div id="bizLinks" class="chips"></div>
+        <div id="bizLocations" class="list small"></div>
+      </section>
+
+      <section class="card profile-right">
+        <h2>Claim Business</h2>
+        <p class="muted">Only one verified owner account can claim this listing.</p>
+        <form id="claimForm" class="grid2">
+          <input id="claimMessage" type="text" placeholder="Explain ownership proof and contact details" />
+          <button type="submit">Request Claim</button>
+        </form>
+        <h3>Account</h3>
+        <form id="loginForm" class="grid2">
+          <input id="email" type="email" placeholder="Email" />
+          <input id="password" type="password" placeholder="Password" />
+          <button type="submit">Login</button>
+        </form>
+        <div class="actions">
+          <button id="logout" type="button">Logout</button>
+        </div>
+      </section>
+
+      <section class="card profile-full">
+        <h2>Ratings Overview</h2>
+        <div id="ratingSummary" class="chips"></div>
+        <div id="ratingDistribution" class="chips"></div>
+      </section>
+
+      <section class="card profile-full">
+        <h2>Reviews</h2>
+        <div class="review-pager row between center">
+          <button id="reviewsPrev" type="button">Previous</button>
+          <span id="reviewsPageInfo" class="muted">Page 1</span>
+          <button id="reviewsNext" type="button">Next</button>
+        </div>
+        <div id="reviewsFeed" class="review-feed"></div>
+      </section>
+    </main>
+
+    <div id="imageLightbox" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Image preview">
+      <div class="overlay-card image-card">
+        <div class="row between center">
+          <h2>Image</h2>
+          <button id="imageLightboxClose" type="button">Close</button>
+        </div>
+        <img id="imageLightboxImg" class="lightbox-image" alt="Preview" />
+      </div>
+    </div>
+
+    <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>
+    <script type="module" src="./business.js"></script>
+  </body>
+  </html>

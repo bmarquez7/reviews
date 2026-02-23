@@ -35,6 +35,11 @@ const resolveInitialApiBase = () => {
 };
 
 const state = {
+  selectedCategoryId: null,
+  businessPage: 1,
+  businessPageSize: 24,
+  businessTotal: 0,
+  businessSearchDebounce: null,
   reviewSort: "newest",
   reviewFilter: "all",
   reviewPage: 1,
@@ -46,6 +51,7 @@ const state = {
   categories: [],
   selectedBusiness: null,
   selectedLocation: null,
+  selectedBusinessLocations: [],
   factors: Object.fromEntries(FACTORS.map(([key]) => [key, 4.5]))
 };
 
@@ -62,6 +68,64 @@ const showToast = (type, message) => {
   el.textContent = message;
   host.appendChild(el);
   setTimeout(() => el.remove(), 3000);
+};
+
+const setAdminUIVisible = (isVisible) => {
+  document.querySelectorAll('.admin-only').forEach((el) => {
+    el.classList.toggle('hidden', !isVisible);
+  });
+};
+
+const syncAdminUI = async () => {
+  if (!state.token) {
+    setAdminUIVisible(false);
+    return;
+  }
+
+  try {
+    const me = await req('/users/me', { headers: authHeaders() });
+    const isAdmin = me?.data?.role === 'admin';
+    setAdminUIVisible(isAdmin);
+  } catch {
+    setAdminUIVisible(false);
+  }
+};
+
+const ensureOverlays = () => {
+  if (!$('businessModal')) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div id="businessModal" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Business details">
+        <div class="overlay-card">
+          <div class="row between center">
+            <h2 id="businessModalTitle">Business</h2>
+            <button id="businessModalClose" type="button">Close</button>
+          </div>
+          <div id="businessModalBody" class="overlay-body"></div>
+        </div>
+      </div>
+      <div id="imageLightbox" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Image preview">
+        <div class="overlay-card image-card">
+          <div class="row between center">
+            <h2>Image</h2>
+            <button id="imageLightboxClose" type="button">Close</button>
+          </div>
+          <img id="imageLightboxImg" class="lightbox-image" alt="Preview" />
+        </div>
+      </div>
+    `;
+    document.body.appendChild(wrap);
+  }
+};
+
+const closeBusinessModal = () => $('businessModal')?.classList.add('hidden');
+const openBusinessModal = () => $('businessModal')?.classList.remove('hidden');
+const closeImageLightbox = () => $('imageLightbox')?.classList.add('hidden');
+const openImageLightbox = (url) => {
+  const img = $('imageLightboxImg');
+  if (!img || !url) return;
+  img.src = url;
+  $('imageLightbox')?.classList.remove('hidden');
 };
 
 const req = async (path, options = {}) => {
@@ -119,18 +183,23 @@ const logoRatingMarkup = (score) => {
   const stepped = Math.round(safe * 2) / 2;
   const items = Array.from({ length: 5 }, (_, i) => {
     const fill = Math.max(0, Math.min(1, stepped - i));
-    const pct = `${Math.round(fill * 100)}%`;
-    return `<span class="logo-token"><span class="logo-fill" style="--fill:${pct}"></span></span>`;
+    const stepFill = fill >= 1 ? 1 : fill >= 0.5 ? 0.5 : 0;
+    const pct = `${Math.round(stepFill * 100)}%`;
+    const fillClass = stepFill === 1 ? 'is-full' : stepFill === 0.5 ? 'is-half' : 'is-empty';
+    return `<span class="logo-token ${fillClass}" style="--fill:${pct}"></span>`;
   }).join('');
   return `<span class="logo-rating" aria-label="Rating ${stepped} out of 5">${items}</span>`;
 };
 
 const renderFactorIcons = (value) => {
   const safe = Math.max(0, Math.min(5, Number(value)));
+  const stepped = Math.round(safe * 2) / 2;
   return Array.from({ length: 5 }, (_, i) => {
-    const fill = Math.max(0, Math.min(1, safe - i));
-    const pct = `${Math.round(fill * 100)}%`;
-    return `<span class="logo-token" data-slot="${i}" role="button" tabindex="0" aria-label="Set rating"><span class="logo-fill" style="--fill:${pct}"></span></span>`;
+    const fill = Math.max(0, Math.min(1, stepped - i));
+    const stepFill = fill >= 1 ? 1 : fill >= 0.5 ? 0.5 : 0;
+    const pct = `${Math.round(stepFill * 100)}%`;
+    const fillClass = stepFill === 1 ? 'is-full' : stepFill === 0.5 ? 'is-half' : 'is-empty';
+    return `<span class="logo-token ${fillClass}" style="--fill:${pct}" data-slot="${i}" role="button" tabindex="0" aria-label="Set rating"></span>`;
   }).join('');
 };
 
@@ -142,15 +211,22 @@ const renderSliders = () => {
 };
 
 const renderCategoryChips = () => {
-  $('categoryChips').innerHTML = state.categories.length ? state.categories.map((c) => `<span class="chip">${c.slug}</span>`).join('') : '<span class="muted">Load categories to display chips.</span>';
+  $('categoryChips').innerHTML = state.categories.length
+    ? state.categories
+        .map((c) => `<button type="button" class="chip ${state.selectedCategoryId === c.id ? 'active' : ''}" data-category-id="${c.id}">${c.slug}</button>`)
+        .join('')
+    : '<span class="muted">Load categories to display chips.</span>';
 };
 
 const renderBusinesses = () => {
-  const search = $('businessSearch').value.trim().toLowerCase();
-  const filtered = state.businesses.filter((b) => b.name.toLowerCase().includes(search));
-  $('businessesList').innerHTML = !filtered.length
+  $('businessesList').innerHTML = !state.businesses.length
     ? '<div class="muted">No businesses found.</div>'
-    : filtered.map((b) => `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${b.id}"><div class="item-title">${b.name}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${b.scores?.weighted_overall_display ?? 'n/a'} / 5</span></div><div class="item-sub">Reviews: ${b.scores?.business_rating_count ?? 0}</div><div class="item-sub">Locations: ${b.locations_count ?? 0}</div></article>`).join('');
+    : state.businesses.map((b) => `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${b.id}"><div class="item-title">${b.name}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${b.scores?.weighted_overall_display ?? 'n/a'} / 5</span></div><div class="item-sub">Reviews: ${b.scores?.business_rating_count ?? 0}</div><div class="item-sub">Locations: ${b.locations_count ?? 0}</div></article>`).join('');
+
+  const totalPages = Math.max(1, Math.ceil(state.businessTotal / state.businessPageSize));
+  $('businessPageInfo').textContent = `Page ${state.businessPage} / ${totalPages} (${state.businessTotal} businesses)`;
+  $('businessPrev').disabled = state.businessPage <= 1;
+  $('businessNext').disabled = state.businessPage >= totalPages;
 };
 
 const renderMediaGrid = (id, urls = []) => {
@@ -160,10 +236,44 @@ const renderMediaGrid = (id, urls = []) => {
     ? urls
         .map(
           (url) =>
-            `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="media-thumb" src="${url}" alt="Uploaded media" loading="lazy" /></a>`
+            `<button type="button" class="media-link" data-image-url="${url}"><img class="media-thumb" src="${url}" alt="Uploaded media" loading="lazy" /></button>`
         )
         .join('')
     : '';
+};
+
+const renderBusinessModal = () => {
+  const b = state.selectedBusiness;
+  if (!b) return;
+  $('businessModalTitle').textContent = b.name || 'Business';
+  const body = $('businessModalBody');
+  if (!body) return;
+
+  const media = (b.media_urls || []).length
+    ? `<div class="media-grid">${b.media_urls
+        .map((url) => `<button type="button" class="media-link" data-image-url="${url}"><img class="media-thumb" src="${url}" alt="Business image" loading="lazy" /></button>`)
+        .join('')}</div>`
+    : '';
+
+  const locations = (b.locations || []).length
+    ? b.locations
+        .map(
+          (loc) =>
+            `<article class="item" data-modal-location-id="${loc.id}">
+              <div class="item-title">${loc.location_name || `${loc.city} location`}</div>
+              <div class="item-sub">${loc.address_line}, ${loc.city}, ${loc.country}</div>
+            </article>`
+        )
+        .join('')
+    : '<div class="muted">No locations available.</div>';
+
+  body.innerHTML = `
+    <div class="muted">${b.description || 'No description yet.'}</div>
+    <div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${b.scores?.weighted_overall_display ?? 'n/a'} / 5</span></div>
+    ${media}
+    <h3>Select Location</h3>
+    <div class="list small">${locations}</div>
+  `;
 };
 
 const renderBusinessDetail = () => {
@@ -264,7 +374,7 @@ const renderReviews = (comments = []) => {
         ? `<div class="media-grid">${c.media_urls
             .map(
               (url) =>
-                `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="media-thumb" src="${url}" alt="Review photo" loading="lazy" /></a>`
+                `<button type="button" class="media-link" data-image-url="${url}"><img class="media-thumb" src="${url}" alt="Review photo" loading="lazy" /></button>`
             )
             .join('')}</div>`
         : '';
@@ -292,27 +402,17 @@ const renderReviews = (comments = []) => {
 
 const loadCategories = async () => { const data = await req('/categories'); state.categories = data.data || []; renderCategoryChips(); };
 const loadBusinesses = async () => {
-  const pageSize = 100;
-  const maxPages = 5;
-  let page = 1;
-  let all = [];
-  let total = 0;
-
-  while (page <= maxPages) {
-    const data = await req(`/businesses?page=${page}&page_size=${pageSize}&sort=name`);
-    const items = data?.data?.items || [];
-    total = Number(data?.data?.total || 0);
-    all = all.concat(items);
-    if (!items.length || all.length >= total) break;
-    page += 1;
-  }
-
-  const seen = new Set();
-  state.businesses = all.filter((b) => {
-    if (!b?.id || seen.has(b.id)) return false;
-    seen.add(b.id);
-    return true;
+  const search = $('businessSearch').value.trim();
+  const params = new URLSearchParams({
+    page: String(state.businessPage),
+    page_size: String(state.businessPageSize),
+    sort: 'name'
   });
+  if (search) params.set('q', search);
+  if (state.selectedCategoryId) params.set('category', state.selectedCategoryId);
+  const data = await req(`/businesses?${params.toString()}`);
+  state.businesses = data?.data?.items || [];
+  state.businessTotal = Number(data?.data?.total || 0);
   renderBusinesses();
 };
 
@@ -321,6 +421,7 @@ const loadBusinessDetail = async (businessId) => {
   state.selectedBusiness = data.data;
   state.selectedLocation = null;
   renderBusinesses(); renderBusinessDetail(); renderSelectedLocationMeta();
+  renderBusinessModal();
   $('editBizName').value = data.data.name || '';
   $('editBizDescription').value = data.data.description || '';
   $('locationScores').innerHTML = '<span class="muted">Select a location to view scores.</span>';
@@ -361,8 +462,11 @@ $('factorSliders').addEventListener('click', (e) => {
   const slot = Number(token.dataset.slot);
   const rect = token.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
-  const half = clickX < rect.width / 2 ? 0.5 : 1;
-  const value = Math.max(0, Math.min(5, slot + half));
+  let value = Math.max(0, Math.min(5, slot + (clickX < rect.width / 2 ? 0.5 : 1)));
+  if (slot === 0 && clickX < rect.width / 2 && Number(state.factors[key] ?? 0) <= 0.5) {
+    value = 0;
+  }
+  value = Math.round(value * 2) / 2;
 
   state.factors[key] = value;
   group.innerHTML = renderFactorIcons(value);
@@ -406,13 +510,30 @@ $('loginForm').addEventListener('submit', async (e) => {
     const data = await req('/auth/login', { method: 'POST', body: JSON.stringify({ email: $('email').value.trim(), password: $('password').value }) });
     state.token = data.data.access_token;
     localStorage.setItem('dir.token', state.token);
+    await syncAdminUI();
     setOut('authOut', data);
     showToast('ok', 'Logged in');
   } catch (err) { setOut('authOut', err); showToast('err', errMsg(err)); }
 });
 
-$('logout').addEventListener('click', () => { state.token = ''; localStorage.removeItem('dir.token'); setOut('authOut', 'Logged out'); showToast('ok', 'Logged out'); });
-$('loadMe').addEventListener('click', async () => { try { if (!requireLogin()) return; setOut('authOut', await req('/users/me', { headers: authHeaders() })); } catch (err) { setOut('authOut', err); showToast('err', errMsg(err)); } });
+$('logout').addEventListener('click', () => {
+  state.token = '';
+  localStorage.removeItem('dir.token');
+  setAdminUIVisible(false);
+  setOut('authOut', 'Logged out');
+  showToast('ok', 'Logged out');
+});
+$('loadMe').addEventListener('click', async () => {
+  try {
+    if (!requireLogin()) return;
+    const me = await req('/users/me', { headers: authHeaders() });
+    setOut('authOut', me);
+    setAdminUIVisible(me?.data?.role === 'admin');
+  } catch (err) {
+    setOut('authOut', err);
+    showToast('err', errMsg(err));
+  }
+});
 $('acceptPolicies').addEventListener('click', async () => {
   try {
     if (!requireLogin()) return;
@@ -422,8 +543,47 @@ $('acceptPolicies').addEventListener('click', async () => {
 });
 
 $('loadCategories').addEventListener('click', async () => { try { await loadCategories(); showToast('ok', 'Categories loaded'); } catch (err) { showToast('err', errMsg(err)); } });
-$('loadBusinesses').addEventListener('click', async () => { try { await loadBusinesses(); showToast('ok', 'Businesses refreshed'); } catch (err) { showToast('err', errMsg(err)); } });
-$('businessSearch').addEventListener('input', renderBusinesses);
+$('loadBusinesses').addEventListener('click', async () => { try { state.businessPage = 1; await loadBusinesses(); showToast('ok', 'Businesses refreshed'); } catch (err) { showToast('err', errMsg(err)); } });
+$('businessSearch').addEventListener('input', () => {
+  if (state.businessSearchDebounce) clearTimeout(state.businessSearchDebounce);
+  state.businessSearchDebounce = setTimeout(async () => {
+    try {
+      state.businessPage = 1;
+      await loadBusinesses();
+    } catch (err) {
+      showToast('err', errMsg(err));
+    }
+  }, 250);
+});
+$('categoryChips').addEventListener('click', async (e) => {
+  const chip = e.target.closest('[data-category-id]');
+  if (!chip) return;
+  const clickedId = chip.dataset.categoryId;
+  state.selectedCategoryId = state.selectedCategoryId === clickedId ? null : clickedId;
+  state.businessPage = 1;
+  renderCategoryChips();
+  try {
+    await loadBusinesses();
+  } catch (err) {
+    showToast('err', errMsg(err));
+  }
+});
+$('businessPrev').addEventListener('click', async () => {
+  state.businessPage = Math.max(1, state.businessPage - 1);
+  try {
+    await loadBusinesses();
+  } catch (err) {
+    showToast('err', errMsg(err));
+  }
+});
+$('businessNext').addEventListener('click', async () => {
+  state.businessPage += 1;
+  try {
+    await loadBusinesses();
+  } catch (err) {
+    showToast('err', errMsg(err));
+  }
+});
 $('reviewSort').addEventListener('change', (e) => {
   state.reviewSort = e.target.value;
   state.reviewPage = 1;
@@ -443,7 +603,12 @@ $('reviewsNext').addEventListener('click', () => {
   renderReviews(state.reviewRaw);
 });
 
-$('businessesList').addEventListener('click', async (e) => { const card = e.target.closest('[data-business-id]'); if (!card) return; try { await loadBusinessDetail(card.dataset.businessId); } catch (err) { showToast('err', errMsg(err)); } });
+$('businessesList').addEventListener('click', async (e) => {
+  const card = e.target.closest('[data-business-id]');
+  if (!card) return;
+  const apiBase = encodeURIComponent(state.apiBase);
+  window.location.href = `./business.html?businessId=${card.dataset.businessId}&apiBase=${apiBase}`;
+});
 $('locationsList').addEventListener('click', async (e) => {
   const card = e.target.closest('[data-location-id]');
   if (!card) return;
@@ -453,6 +618,44 @@ $('locationsList').addEventListener('click', async (e) => {
     $('locationScores').innerHTML = '<span class="muted">Failed to load score summary.</span>';
     $('reviewsFeed').innerHTML = `<div class="muted">${errMsg(err)}</div>`;
     showToast('err', errMsg(err));
+  }
+});
+
+document.addEventListener('click', async (e) => {
+  const closeBiz = e.target.closest('#businessModalClose');
+  if (closeBiz) {
+    closeBusinessModal();
+    return;
+  }
+  const closeImg = e.target.closest('#imageLightboxClose');
+  if (closeImg) {
+    closeImageLightbox();
+    return;
+  }
+  if (e.target.id === 'businessModal') {
+    closeBusinessModal();
+    return;
+  }
+  if (e.target.id === 'imageLightbox') {
+    closeImageLightbox();
+    return;
+  }
+
+  const mediaBtn = e.target.closest('[data-image-url]');
+  if (mediaBtn) {
+    openImageLightbox(mediaBtn.dataset.imageUrl);
+    return;
+  }
+
+  const loc = e.target.closest('[data-modal-location-id]');
+  if (loc) {
+    try {
+      await loadLocationDetail(loc.dataset.modalLocationId);
+      closeBusinessModal();
+      showToast('ok', 'Location selected');
+    } catch (err) {
+      showToast('err', errMsg(err));
+    }
   }
 });
 
@@ -568,7 +771,9 @@ $('businessImageForm').addEventListener('submit', async (e) => {
 });
 
 (async () => {
+  ensureOverlays();
   loadTheme();
+  await syncAdminUI();
   renderSliders();
   try { await Promise.all([loadCategories(), loadBusinesses()]); } catch {}
 })();

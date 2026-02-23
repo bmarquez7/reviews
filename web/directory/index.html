@@ -8,8 +8,11 @@
   </head>
   <body>
     <header class="topbar">
-      <h1>Directory Explorer</h1>
-      <div class="api-base-wrap">
+      <div class="brand">
+        <img class="brand-logo" src="./assets/new-roots-logo.png" alt="New Roots Albania" />
+        <h1>New Roots Albania Reviews</h1>
+      </div>
+      <div class="api-base-wrap admin-only hidden">
         <label for="apiBase">API</label>
         <input id="apiBase" type="text" value="" placeholder="https://your-api-host/v1" />
         <button id="saveApiBase" type="button">Save</button>
@@ -45,6 +48,11 @@
         </div>
         <div id="categoryChips" class="chips"></div>
         <div id="businessesList" class="list"></div>
+        <div class="business-pager row between center">
+          <button id="businessPrev" type="button">Previous</button>
+          <span id="businessPageInfo" class="muted">Page 1</span>
+          <button id="businessNext" type="button">Next</button>
+        </div>
       </section>
 
       <section class="card business-card">
@@ -146,7 +154,7 @@
         <pre id="toolsOut" class="out"></pre>
       </section>
 
-      <section class="card theme-card">
+      <section class="card theme-card admin-only hidden">
         <h2>Appearance</h2>
         <div class="grid2">
           <label>Brand color <input id="themeBrand" type="color" value="#0f6a4d" /></label>

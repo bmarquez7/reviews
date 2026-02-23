@@ -251,6 +251,202 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
   );
 
   app.get(
+    '/businesses/:businessId/reviews',
+    {
+      schema: {
+        summary: 'Get business-level reviews with factor breakdown and reviewer profile',
+        tags: ['Directory'],
+        params: {
+          type: 'object',
+          required: ['businessId'],
+          properties: {
+            businessId: { type: 'string', format: 'uuid' }
+          }
+        },
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'integer', minimum: 1 },
+            page_size: { type: 'integer', minimum: 1, maximum: 50 }
+          }
+        }
+      }
+    },
+    async (request) => {
+      const params = z.object({ businessId: z.string().uuid() }).parse(request.params);
+      const query = z
+        .object({
+          page: z.coerce.number().int().min(1).default(1),
+          page_size: z.coerce.number().int().min(1).max(50).default(10)
+        })
+        .parse(request.query);
+
+      const from = (query.page - 1) * query.page_size;
+      const to = from + query.page_size - 1;
+
+      const locationRes = await supabaseAdmin
+        .from('business_locations')
+        .select('id')
+        .eq('business_id', params.businessId)
+        .eq('status', 'active');
+
+      if (locationRes.error) {
+        throw new ApiError(500, 'INTERNAL_ERROR', locationRes.error.message);
+      }
+
+      const locationIds = (locationRes.data ?? []).map((row) => row.id);
+      if (!locationIds.length) {
+        return {
+          data: {
+            items: [],
+            summary: null,
+            rating_distribution: buildRatingDistribution([]),
+            page: query.page,
+            page_size: query.page_size,
+            total: 0
+          }
+        };
+      }
+
+      const commentsRes = await supabaseAdmin
+        .from('comments')
+        .select('id,rating_id,user_id,location_id,content,visit_month,visit_year,created_at,status', { count: 'exact' })
+        .in('location_id', locationIds)
+        .eq('status', 'approved')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      const ratingsForSummaryRes = await supabaseAdmin
+        .from('ratings')
+        .select(
+          'id,overall_score,pricing_transparency,friendliness,lgbtq_acceptance,racial_tolerance,religious_tolerance,accessibility_friendliness,cleanliness'
+        )
+        .in('location_id', locationIds)
+        .eq('status', 'approved');
+
+      if (commentsRes.error || ratingsForSummaryRes.error) {
+        throw new ApiError(500, 'INTERNAL_ERROR', commentsRes.error?.message ?? ratingsForSummaryRes.error?.message ?? 'Lookup failed');
+      }
+
+      const ratingIds = Array.from(new Set((commentsRes.data ?? []).map((row) => row.rating_id)));
+      const userIds = Array.from(new Set((commentsRes.data ?? []).map((row) => row.user_id)));
+      const commentIds = (commentsRes.data ?? []).map((row) => row.id);
+
+      const [ratingsRes, profilesRes, repliesRes] = await Promise.all([
+        ratingIds.length
+          ? supabaseAdmin
+              .from('ratings')
+              .select(
+                'id,overall_score,pricing_transparency,friendliness,lgbtq_acceptance,racial_tolerance,religious_tolerance,accessibility_friendliness,cleanliness'
+              )
+              .in('id', ratingIds)
+          : Promise.resolve({ data: [], error: null }),
+        userIds.length
+          ? supabaseAdmin
+              .from('user_profiles')
+              .select('user_id,screen_name,country_of_origin,age_public,age_range_public,profile_image_url')
+              .in('user_id', userIds)
+          : Promise.resolve({ data: [], error: null }),
+        commentIds.length
+          ? supabaseAdmin
+              .from('business_replies')
+              .select('id,comment_id,business_id,content,created_at,status')
+              .in('comment_id', commentIds)
+              .eq('status', 'approved')
+              .is('deleted_at', null)
+          : Promise.resolve({ data: [], error: null })
+      ]);
+
+      if (ratingsRes.error || profilesRes.error || repliesRes.error) {
+        throw new ApiError(500, 'INTERNAL_ERROR', ratingsRes.error?.message ?? profilesRes.error?.message ?? repliesRes.error?.message ?? 'Lookup failed');
+      }
+
+      const ratingsById = new Map((ratingsRes.data ?? []).map((row) => [row.id, row]));
+      const profilesByUserId = new Map((profilesRes.data ?? []).map((row) => [row.user_id, row]));
+      const repliesByComment = new Map<string, unknown[]>();
+      for (const reply of repliesRes.data ?? []) {
+        const current = repliesByComment.get(reply.comment_id) ?? [];
+        current.push(reply);
+        repliesByComment.set(reply.comment_id, current);
+      }
+
+      const overallScores = (ratingsForSummaryRes.data ?? []).map((row) => Number(row.overall_score));
+      const avg = (field: keyof (typeof ratingsForSummaryRes.data)[number]) => {
+        const values = (ratingsForSummaryRes.data ?? [])
+          .map((row) => Number(row[field] as number))
+          .filter((v) => Number.isFinite(v));
+        if (!values.length) return null;
+        return values.reduce((sum, v) => sum + v, 0) / values.length;
+      };
+
+      const summary = (ratingsForSummaryRes.data ?? []).length
+        ? {
+            rating_count: (ratingsForSummaryRes.data ?? []).length,
+            overall_raw: overallScores.reduce((sum, v) => sum + v, 0) / overallScores.length,
+            overall_display: Math.round((overallScores.reduce((sum, v) => sum + v, 0) / overallScores.length) * 2) / 2,
+            factors: {
+              pricing_transparency: avg('pricing_transparency'),
+              friendliness: avg('friendliness'),
+              lgbtq_acceptance: avg('lgbtq_acceptance'),
+              racial_tolerance: avg('racial_tolerance'),
+              religious_tolerance: avg('religious_tolerance'),
+              accessibility_friendliness: avg('accessibility_friendliness'),
+              cleanliness: avg('cleanliness')
+            }
+          }
+        : null;
+
+      const items = await Promise.all(
+        (commentsRes.data ?? []).map(async (comment) => {
+          const rating = ratingsById.get(comment.rating_id);
+          const profile = profilesByUserId.get(comment.user_id);
+          const media_urls = await listPublicMedia(REVIEW_MEDIA_BUCKET, `comment/${comment.id}/`, 6);
+          return {
+            ...comment,
+            media_urls,
+            rating: rating
+              ? {
+                  overall_score_raw: Number(rating.overall_score),
+                  overall_score_display: Math.round(Number(rating.overall_score) * 2) / 2,
+                  factors: {
+                    pricing_transparency: Number(rating.pricing_transparency),
+                    friendliness: Number(rating.friendliness),
+                    lgbtq_acceptance: Number(rating.lgbtq_acceptance),
+                    racial_tolerance: Number(rating.racial_tolerance),
+                    religious_tolerance: Number(rating.religious_tolerance),
+                    accessibility_friendliness: Number(rating.accessibility_friendliness),
+                    cleanliness: Number(rating.cleanliness)
+                  }
+                }
+              : null,
+            reviewer: profile
+              ? {
+                  screen_name: profile.screen_name,
+                  country_of_origin: profile.country_of_origin,
+                  age_range_public: profile.age_public ? profile.age_range_public : null,
+                  profile_image_url: profile.profile_image_url
+                }
+              : null,
+            business_replies: repliesByComment.get(comment.id) ?? []
+          };
+        })
+      );
+
+      return {
+        data: {
+          items,
+          summary,
+          rating_distribution: buildRatingDistribution(overallScores),
+          page: query.page,
+          page_size: query.page_size,
+          total: commentsRes.count ?? 0
+        }
+      };
+    }
+  );
+
+  app.get(
     '/locations/:locationId',
     {
       schema: {
