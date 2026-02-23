@@ -11,6 +11,7 @@ const FACTORS = [
 ];
 
 const THEME_DEFAULTS = { brand: '#0f6a4d', bg: '#f5f2eb', card: '#fffdf7', iconUrl: './assets/new-roots-logo.png' };
+const PROD_API_BASE = "https://grow-albania-directory-api.onrender.com/v1";
 
 const resolveInitialApiBase = () => {
   const saved = localStorage.getItem('dir.apiBase');
@@ -27,7 +28,7 @@ const resolveInitialApiBase = () => {
   if (fromGlobal) return fromGlobal;
 
   if (window.location.hostname.endsWith('netlify.app')) {
-    return `${window.location.origin}/v1`;
+    return PROD_API_BASE;
   }
 
   return 'http://127.0.0.1:4000/v1';
@@ -67,6 +68,16 @@ const req = async (path, options = {}) => {
   const res = await fetch(`${state.apiBase}${path}`, {
     ...options,
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw json;
+  return json;
+};
+
+const reqForm = async (path, formData, options = {}) => {
+  const res = await fetch(`${state.apiBase}${path}`, {
+    ...options,
+    body: formData
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw json;
@@ -142,14 +153,29 @@ const renderBusinesses = () => {
     : filtered.map((b) => `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${b.id}"><div class="item-title">${b.name}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${b.scores?.weighted_overall_display ?? 'n/a'} / 5</span></div><div class="item-sub">Reviews: ${b.scores?.business_rating_count ?? 0}</div><div class="item-sub">Locations: ${b.locations_count ?? 0}</div></article>`).join('');
 };
 
+const renderMediaGrid = (id, urls = []) => {
+  const root = $(id);
+  if (!root) return;
+  root.innerHTML = (urls || []).length
+    ? urls
+        .map(
+          (url) =>
+            `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="media-thumb" src="${url}" alt="Uploaded media" loading="lazy" /></a>`
+        )
+        .join('')
+    : '';
+};
+
 const renderBusinessDetail = () => {
   if (!state.selectedBusiness) {
     $('businessDetail').textContent = 'Pick a business from the list.';
     $('locationsList').innerHTML = '<div class="muted">No locations loaded.</div>';
+    renderMediaGrid('businessMedia', []);
     return;
   }
   const b = state.selectedBusiness;
   $('businessDetail').innerHTML = `<div><strong>${b.name}</strong></div><div class="muted">${b.description || 'No description yet.'}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${b.scores?.weighted_overall_display ?? 'n/a'} / 5</span></div>`;
+  renderMediaGrid('businessMedia', b.media_urls || []);
   $('locationsList').innerHTML = !b.locations?.length
     ? '<div class="muted">No locations yet. Use Business Tools to create one.</div>'
     : b.locations.map((loc) => `<article class="item ${state.selectedLocation?.id === loc.id ? 'active' : ''}" data-location-id="${loc.id}"><div class="item-title">${loc.location_name || `${loc.city} location`}</div><div class="item-sub">${loc.address_line}, ${loc.city}, ${loc.country}</div></article>`).join('');
@@ -234,6 +260,14 @@ const renderReviews = (comments = []) => {
         .join('');
 
       const visit = c.visit_month && c.visit_year ? `Visited ${c.visit_month}/${c.visit_year}` : 'Visit date not provided';
+      const media = (c.media_urls || []).length
+        ? `<div class="media-grid">${c.media_urls
+            .map(
+              (url) =>
+                `<a href="${url}" target="_blank" rel="noopener noreferrer"><img class="media-thumb" src="${url}" alt="Review photo" loading="lazy" /></a>`
+            )
+            .join('')}</div>`
+        : '';
 
       return `
         <article class="review-card">
@@ -248,6 +282,7 @@ const renderReviews = (comments = []) => {
             <div class="review-meta">${fmtDate(c.created_at)}</div>
           </div>
           <div class="review-text">${c.content || ''}</div>
+          ${media}
           ${replies}
         </article>
       `;
@@ -427,9 +462,24 @@ $('ratingForm').addEventListener('submit', async (e) => {
     if (!requireLogin()) return;
     if (!state.selectedLocation) throw { error: { message: 'Select a location first.' } };
     const comment = $('commentText').value.trim();
+    const imageInput = $('commentImages');
     const rating = await req(`/locations/${state.selectedLocation.id}/ratings/me`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify({ factors: state.factors, secondary: { pricing_value: 4.5, child_care_availability: 2.0, child_friendliness: 3.0, party_size_accommodations: 4.0, accessibility_details_score: 4.0, accessibility_notes: 'Front ramp and accessible restroom.' } }) });
     const posted = await req(`/ratings/${rating.data.rating_id}/comment`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ content: comment, visit_month: 2, visit_year: 2026 }) });
-    setOut('postOut', { rating, posted }); showToast('ok', 'Rating and comment submitted'); await loadLocationDetail(state.selectedLocation.id);
+    const uploaded = [];
+    const files = Array.from(imageInput?.files || []).slice(0, 6);
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append('file', file);
+      const media = await reqForm(`/media/comments/${posted.data.comment_id}/images`, formData, {
+        method: 'POST',
+        headers: authHeaders()
+      });
+      uploaded.push(media.data);
+    }
+    if (imageInput) imageInput.value = '';
+    setOut('postOut', { rating, posted, uploaded });
+    showToast('ok', uploaded.length ? `Submitted with ${uploaded.length} image(s)` : 'Rating and comment submitted');
+    await loadLocationDetail(state.selectedLocation.id);
   } catch (err) { setOut('postOut', err); showToast('err', errMsg(err)); }
 });
 
@@ -486,6 +536,35 @@ $('appealForm').addEventListener('submit', async (e) => {
     const data = await req('/appeals', { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
     setOut('toolsOut', data); showToast('ok', 'Appeal submitted');
   } catch (err) { setOut('toolsOut', err); showToast('err', errMsg(err)); }
+});
+
+$('businessImageForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    if (!requireLogin()) return;
+    if (!state.selectedBusiness) throw { error: { message: 'Select a business first.' } };
+    const input = $('businessImages');
+    const files = Array.from(input?.files || []).slice(0, 8);
+    if (!files.length) throw { error: { message: 'Choose at least one image.' } };
+
+    const uploaded = [];
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append('file', file);
+      const media = await reqForm(`/media/businesses/${state.selectedBusiness.id}/images`, formData, {
+        method: 'POST',
+        headers: authHeaders()
+      });
+      uploaded.push(media.data);
+    }
+    if (input) input.value = '';
+    setOut('toolsOut', { uploaded });
+    showToast('ok', `Uploaded ${uploaded.length} business image(s)`);
+    await loadBusinessDetail(state.selectedBusiness.id);
+  } catch (err) {
+    setOut('toolsOut', err);
+    showToast('err', errMsg(err));
+  }
 });
 
 (async () => {

@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { env } from './lib/env.js';
@@ -12,6 +13,7 @@ import { directoryRoutes } from './routes/directory.js';
 import { ratingRoutes } from './routes/ratings.js';
 import { businessRoutes } from './routes/business.js';
 import { adminRoutes } from './routes/admin.js';
+import { mediaRoutes } from './routes/media.js';
 
 export const buildApp = () => {
   const app = Fastify({ logger: true });
@@ -37,6 +39,13 @@ export const buildApp = () => {
       cb(null, allowedOrigins.includes(origin));
     },
     credentials: true
+  });
+
+  app.register(multipart, {
+    limits: {
+      fileSize: 8 * 1024 * 1024,
+      files: 4
+    }
   });
 
   app.register(swagger, {
@@ -75,6 +84,7 @@ export const buildApp = () => {
   app.register(ratingRoutes, { prefix: '/v1' });
   app.register(businessRoutes, { prefix: '/v1' });
   app.register(adminRoutes, { prefix: '/v1' });
+  app.register(mediaRoutes, { prefix: '/v1' });
 
   return app;
 };

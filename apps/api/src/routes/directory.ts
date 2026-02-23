@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { ApiError } from '../lib/http-errors.js';
+import { BUSINESS_MEDIA_BUCKET, REVIEW_MEDIA_BUCKET, ensureMediaBucket, listPublicMedia } from '../lib/media.js';
 import { supabaseAdmin } from '../lib/supabase.js';
 
 const listBusinessesQuerySchema = z.object({
@@ -29,6 +30,8 @@ const buildRatingDistribution = (scores: number[]) => {
 };
 
 export const directoryRoutes: FastifyPluginAsync = async (app) => {
+  await Promise.all([ensureMediaBucket(BUSINESS_MEDIA_BUCKET), ensureMediaBucket(REVIEW_MEDIA_BUCKET)]);
+
   app.get(
     '/categories',
     {
@@ -233,12 +236,15 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
       throw new ApiError(500, 'INTERNAL_ERROR', locationRes.error?.message ?? scoreRes.error?.message ?? categoryRes.error?.message ?? 'Lookup failed');
     }
 
+    const mediaUrls = await listPublicMedia(BUSINESS_MEDIA_BUCKET, `business/${params.businessId}/`, 12);
+
     return {
       data: {
         ...businessRes.data,
         categories: categoryRes.data ?? [],
         scores: scoreRes.data ?? null,
-        locations: locationRes.data ?? []
+        locations: locationRes.data ?? [],
+        media_urls: mediaUrls
       }
     };
     }
@@ -327,15 +333,23 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
 
     const ratingDistribution = buildRatingDistribution((ratingsRes.data ?? []).map((row) => Number(row.overall_score)));
 
+    const commentsWithMedia = await Promise.all(
+      (commentsRes.data ?? []).map(async (comment) => {
+        const mediaUrls = await listPublicMedia(REVIEW_MEDIA_BUCKET, `comment/${comment.id}/`, 6);
+        return {
+          ...comment,
+          media_urls: mediaUrls,
+          business_replies: repliesByComment.get(comment.id) ?? []
+        };
+      })
+    );
+
     return {
       data: {
         location: locationRes.data,
         scores: scoreRes.data,
         rating_distribution: ratingDistribution,
-        comments: (commentsRes.data ?? []).map((comment) => ({
-          ...comment,
-          business_replies: repliesByComment.get(comment.id) ?? []
-        })),
+        comments: commentsWithMedia,
         page: query.page,
         page_size: query.page_size,
         total_comments: commentsRes.count ?? 0

@@ -176,6 +176,22 @@ button:hover { filter: brightness(1.05); }
   background: #f1f7f4;
 }
 
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.media-thumb {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #d9dfe9;
+  background: #eef2f8;
+}
+
 .factor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.6rem; margin-bottom: 0.75rem; }
 .slider-item { border: 1px solid var(--line); border-radius: 10px; padding: 0.55rem; background: #fffaf1; }
 .slider-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; font-size: 0.9rem; }
@@ -251,4 +267,8 @@ select {
 
 .embed-mode .theme-card {
   grid-column: span 12;
+}
+
+.embed-mode .out {
+  display: none;
 }

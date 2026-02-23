@@ -50,6 +50,7 @@
       <section class="card business-card">
         <h2>Selected Business</h2>
         <div id="businessDetail" class="muted">Pick a business from the list.</div>
+        <div id="businessMedia" class="media-grid"></div>
         <h3>Locations</h3>
         <div id="locationsList" class="list small"></div>
       </section>
@@ -92,6 +93,7 @@
         <div id="factorSliders" class="factor-grid"></div>
         <form id="ratingForm" class="grid2">
           <input id="commentText" type="text" placeholder="Comment (minimum 10 words)" required />
+          <input id="commentImages" type="file" accept="image/*" multiple />
           <button type="submit">Submit Rating + Comment</button>
         </form>
         <pre id="postOut" class="out"></pre>
@@ -117,6 +119,12 @@
           <input id="editBizName" placeholder="New business name" />
           <input id="editBizDescription" placeholder="New description" />
           <button type="submit">Update Selected Business</button>
+        </form>
+
+        <h3>Upload Business Photos</h3>
+        <form id="businessImageForm" class="grid2">
+          <input id="businessImages" type="file" accept="image/*" multiple />
+          <button type="submit">Upload Business Images</button>
         </form>
 
         <h3>Create Location For Selected Business</h3>

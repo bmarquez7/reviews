@@ -33,6 +33,7 @@
       <section class="card business-card">
         <h2>Business</h2>
         <div id="businessDetail" class="muted">Pick a business.</div>
+        <div id="businessMedia" class="media-grid"></div>
         <h3>Locations</h3>
         <div id="locationsList" class="list small"></div>
       </section>
@@ -83,6 +84,7 @@
         <div id="factorSliders" class="factor-grid"></div>
         <form id="ratingForm" class="grid2">
           <input id="commentText" type="text" placeholder="Comment (minimum 10 words)" required />
+          <input id="commentImages" type="file" accept="image/*" multiple />
           <button type="submit">Submit Rating + Comment</button>
         </form>
         <pre id="authOut" class="out"></pre>
@@ -107,6 +109,8 @@
         <input id="locCountry" value="Albania" />
         <input id="appealReason" />
         <input id="appealDetails" />
+        <form id="businessImageForm"></form>
+        <input id="businessImages" type="file" />
         <pre id="toolsOut" class="out"></pre>
       </section>
 
