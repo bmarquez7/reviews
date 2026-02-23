@@ -256,7 +256,30 @@ const renderReviews = (comments = []) => {
 };
 
 const loadCategories = async () => { const data = await req('/categories'); state.categories = data.data || []; renderCategoryChips(); };
-const loadBusinesses = async () => { const data = await req('/businesses'); state.businesses = data.data.items || []; renderBusinesses(); };
+const loadBusinesses = async () => {
+  const pageSize = 100;
+  const maxPages = 5;
+  let page = 1;
+  let all = [];
+  let total = 0;
+
+  while (page <= maxPages) {
+    const data = await req(`/businesses?page=${page}&page_size=${pageSize}&sort=name`);
+    const items = data?.data?.items || [];
+    total = Number(data?.data?.total || 0);
+    all = all.concat(items);
+    if (!items.length || all.length >= total) break;
+    page += 1;
+  }
+
+  const seen = new Set();
+  state.businesses = all.filter((b) => {
+    if (!b?.id || seen.has(b.id)) return false;
+    seen.add(b.id);
+    return true;
+  });
+  renderBusinesses();
+};
 
 const loadBusinessDetail = async (businessId) => {
   const data = await req(`/businesses/${businessId}`);
