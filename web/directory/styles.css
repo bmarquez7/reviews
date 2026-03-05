@@ -41,7 +41,7 @@ h3 { font-size: 0.95rem; margin: 0.9rem 0 0.5rem; }
 
 .grid2 { display: grid; grid-template-columns: 1fr; gap: 0.55rem; }
 input, button { padding: 0.62rem 0.72rem; border-radius: 8px; border: 1px solid #d5dbe7; font: inherit; }
-button { background: linear-gradient(180deg, var(--brand-2), var(--brand)); color: #fff; border: 0; cursor: pointer; }
+button { background: linear-gradient(180deg, #dcefe6, #c9e4d8); color: var(--ink); border: 0; cursor: pointer; }
 button:hover { filter: brightness(1.05); }
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
 .actions.compact { margin-top: 0; }
@@ -295,7 +295,7 @@ button:hover { filter: brightness(1.05); }
 }
 
 .toast-host { position: fixed; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 0.45rem; z-index: 30; }
-.toast { min-width: 240px; max-width: 360px; color: #fff; border-radius: 9px; padding: 0.55rem 0.65rem; font-size: 0.88rem; box-shadow: 0 8px 16px rgba(0, 0, 0, 0.18); }
+.toast { min-width: 240px; max-width: 360px; color: var(--ink); border-radius: 9px; padding: 0.55rem 0.65rem; font-size: 0.88rem; box-shadow: 0 8px 16px rgba(0, 0, 0, 0.18); }
 .toast.ok { background: #0f6a4d; }
 .toast.err { background: #a02626; }
 
@@ -381,7 +381,7 @@ select {
 
 .tab-btn.active {
   background: linear-gradient(180deg, var(--brand-2), var(--brand));
-  color: #fff;
+  color: var(--ink);
   border-color: transparent;
 }
 
