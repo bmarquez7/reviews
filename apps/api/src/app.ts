@@ -76,6 +76,15 @@ export const buildApp = () => {
     void reply.code(shaped.statusCode).send(shaped.body);
   });
 
+  app.get('/', async () => ({
+    data: {
+      ok: true,
+      service: 'directory-api',
+      health: '/v1/health',
+      docs: '/docs'
+    }
+  }));
+
   app.register(healthRoutes, { prefix: '/v1' });
   app.register(authRoutes, { prefix: '/v1' });
   app.register(i18nRoutes, { prefix: '/v1' });

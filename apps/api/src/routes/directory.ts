@@ -30,7 +30,11 @@ const buildRatingDistribution = (scores: number[]) => {
 };
 
 export const directoryRoutes: FastifyPluginAsync = async (app) => {
-  await Promise.all([ensureMediaBucket(BUSINESS_MEDIA_BUCKET), ensureMediaBucket(REVIEW_MEDIA_BUCKET)]);
+  try {
+    await Promise.all([ensureMediaBucket(BUSINESS_MEDIA_BUCKET), ensureMediaBucket(REVIEW_MEDIA_BUCKET)]);
+  } catch (err) {
+    app.log.warn({ err }, 'Media bucket bootstrap failed; continuing without startup bucket check');
+  }
 
   app.get(
     '/categories',
