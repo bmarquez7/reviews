@@ -213,9 +213,25 @@ export const businessRoutes: FastifyPluginAsync = async (app) => {
       }
     },
     async (request) => {
-    const user = await requirePoliciesAccepted(request);
+    let user = await requirePoliciesAccepted(request);
     if (!['business_owner', 'admin'].includes(user.role)) {
-      throw new ApiError(403, 'FORBIDDEN', 'Business role required');
+      if (user.role !== 'consumer') {
+        throw new ApiError(403, 'FORBIDDEN', 'Business role required');
+      }
+
+      const promote = await supabaseAdmin
+        .from('users')
+        .update({ role: 'business_owner' })
+        .eq('id', user.id)
+        .eq('role', 'consumer')
+        .select('id,role')
+        .single();
+
+      if (promote.error || !promote.data) {
+        throw new ApiError(500, 'INTERNAL_ERROR', promote.error?.message ?? 'Unable to enable business account');
+      }
+
+      user = { ...user, role: 'business_owner' };
     }
 
     const body = createBusinessSchema.parse(request.body);
