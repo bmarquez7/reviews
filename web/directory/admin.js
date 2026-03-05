@@ -1,9 +1,10 @@
 const $ = (id) => document.getElementById(id);
 const PROD_API_BASE = 'https://grow-albania-directory-api.onrender.com/v1';
-const apiBase = localStorage.getItem('dir.apiBase') || PROD_API_BASE;
+const initialApiBase = localStorage.getItem('dir.apiBase') || PROD_API_BASE;
 
 const state = {
   token: localStorage.getItem('dir.token') || '',
+  apiBase: initialApiBase,
   tier: null,
   role: null,
   category: 'all',
@@ -29,14 +30,14 @@ const req = async (path, options = {}) => {
     ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
     ...(options.headers || {})
   };
-  const res = await fetch(`${apiBase}${path}`, { ...options, headers });
+  const res = await fetch(`${state.apiBase}${path}`, { ...options, headers });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw json;
   return json;
 };
 
 const reqForm = async (path, formData) => {
-  const res = await fetch(`${apiBase}${path}`, {
+  const res = await fetch(`${state.apiBase}${path}`, {
     method: 'POST',
     body: formData,
     headers: state.token ? { Authorization: `Bearer ${state.token}` } : {}
@@ -49,6 +50,16 @@ const reqForm = async (path, formData) => {
 const tierRank = (tier) => (tier === 'owner' ? 3 : tier === 'super_admin' ? 2 : tier === 'admin' ? 1 : 0);
 const canSuper = () => tierRank(state.tier) >= 2;
 const canOwner = () => tierRank(state.tier) >= 3;
+
+const syncOwnerCustomization = () => {
+  const section = $('ownerCustomization');
+  if (!section) return;
+  const allowed = canOwner();
+  section.classList.toggle('hidden', !allowed);
+  if (!allowed) return;
+  const input = $('adminApiBase');
+  if (input) input.value = state.apiBase;
+};
 
 const renderCategories = () => {
   const canSuper = tierRank(state.tier) >= 2;
@@ -306,6 +317,7 @@ const loadMe = async () => {
   state.role = me.data.role;
   $('adminTierPill').textContent = `Tier: ${state.tier}`;
   $('roleAssignForm')?.classList.toggle('hidden', !canSuper());
+  syncOwnerCustomization();
 };
 
 const loadInbox = async () => {
@@ -633,6 +645,32 @@ $('adminResetPasswordForm').addEventListener('submit', async (e) => {
 $('adminLogout').addEventListener('click', () => {
   localStorage.removeItem('dir.token');
   window.location.href = './embed.html';
+});
+
+$('adminApiBaseSave')?.addEventListener('click', () => {
+  if (!canOwner()) {
+    showToast('err', 'Owner access required');
+    return;
+  }
+  const next = $('adminApiBase')?.value?.trim();
+  if (!next) {
+    showToast('err', 'API base is required');
+    return;
+  }
+  state.apiBase = next;
+  localStorage.setItem('dir.apiBase', state.apiBase);
+  showToast('ok', 'API base saved');
+});
+
+$('adminApiBaseReset')?.addEventListener('click', () => {
+  if (!canOwner()) {
+    showToast('err', 'Owner access required');
+    return;
+  }
+  state.apiBase = PROD_API_BASE;
+  localStorage.setItem('dir.apiBase', state.apiBase);
+  if ($('adminApiBase')) $('adminApiBase').value = state.apiBase;
+  showToast('ok', 'Using default API base');
 });
 
 $('adminImageBatchForm').addEventListener('submit', async (e) => {

@@ -59,7 +59,7 @@ const state = {
   factors: Object.fromEntries(FACTORS.map(([key]) => [key, 4.5]))
 };
 
-$('apiBase').value = state.apiBase;
+if ($('apiBase')) $('apiBase').value = state.apiBase;
 
 const setOut = (id, value) => { $(id).textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); };
 const errMsg = (err) => err?.error?.message || 'Request failed';
@@ -582,7 +582,14 @@ const doSignup = async (payload) => {
   return data;
 };
 
-$('saveApiBase').addEventListener('click', () => { state.apiBase = $('apiBase').value.trim(); localStorage.setItem('dir.apiBase', state.apiBase); showToast('ok', 'API base saved'); });
+const saveApiBaseBtn = $('saveApiBase');
+if (saveApiBaseBtn && $('apiBase')) {
+  saveApiBaseBtn.addEventListener('click', () => {
+    state.apiBase = $('apiBase').value.trim();
+    localStorage.setItem('dir.apiBase', state.apiBase);
+    showToast('ok', 'API base saved');
+  });
+}
 $('themeBrand').addEventListener('input', previewTheme);
 $('themeBg').addEventListener('input', previewTheme);
 $('themeCard').addEventListener('input', previewTheme);
