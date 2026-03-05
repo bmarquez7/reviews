@@ -41,7 +41,17 @@ h3 { font-size: 0.95rem; margin: 0.9rem 0 0.5rem; }
 
 .grid2 { display: grid; grid-template-columns: 1fr; gap: 0.55rem; }
 input, button { padding: 0.62rem 0.72rem; border-radius: 8px; border: 1px solid #d5dbe7; font: inherit; }
-button { background: linear-gradient(180deg, #dcefe6, #c9e4d8); color: var(--ink); border: 0; cursor: pointer; }
+button {
+  background: linear-gradient(180deg, #dcefe6, #c9e4d8);
+  color: var(--ink);
+  border: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
+}
 button:hover { filter: brightness(1.05); }
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
 .actions.compact { margin-top: 0; }
@@ -234,6 +244,8 @@ button:hover { filter: brightness(1.05); }
   border: 0;
   background: transparent;
   cursor: zoom-in;
+  display: block;
+  width: 100%;
 }
 
 .overlay {
@@ -345,6 +357,11 @@ select {
 
 .link-chip {
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
 }
 
 .business-page .profile-hero { grid-column: span 12; }
