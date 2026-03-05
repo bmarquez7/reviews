@@ -65,6 +65,23 @@ const setOut = (id, value) => { $(id).textContent = typeof value === 'string' ? 
 const errMsg = (err) => err?.error?.message || 'Request failed';
 const authHeaders = () => (state.token ? { Authorization: `Bearer ${state.token}` } : {});
 
+const compactLocationLabel = (businessName, loc, index = 0) => {
+  const city = String(loc?.city || '').trim();
+  const raw = String(loc?.location_name || '').trim();
+  if (!raw) return city ? `${city} location` : `Location ${index + 1}`;
+
+  let label = raw;
+  if (businessName) {
+    const escaped = String(businessName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    label = label.replace(new RegExp(`^${escaped}\\s*[-–—,:|]*\\s*`, 'i'), '').trim();
+  }
+
+  if (/^\(?main\)?$/i.test(label) || /^main\s+location$/i.test(label)) return 'Main location';
+  if (!label) return city ? `${city} location` : 'Main location';
+  if (city && label.toLowerCase() === city.toLowerCase()) return `${city} location`;
+  return label;
+};
+
 const showToast = (type, message) => {
   const host = $('toastHost');
   const el = document.createElement('div');
@@ -327,9 +344,9 @@ const renderBusinessModal = () => {
   const locations = (b.locations || []).length
     ? b.locations
         .map(
-          (loc) =>
+          (loc, index) =>
             `<article class="item" data-modal-location-id="${loc.id}">
-              <div class="item-title">${loc.location_name || `${loc.city} location`}</div>
+              <div class="item-title">${compactLocationLabel(b.name, loc, index)}</div>
               <div class="item-sub">${loc.address_line}, ${loc.city}, ${loc.country}</div>
             </article>`
         )
@@ -357,12 +374,12 @@ const renderBusinessDetail = () => {
   renderMediaGrid('businessMedia', b.media_urls || []);
   $('locationsList').innerHTML = !b.locations?.length
     ? '<div class="muted">No locations yet. Use Business Tools to create one.</div>'
-    : b.locations.map((loc) => `<article class="item ${state.selectedLocation?.id === loc.id ? 'active' : ''}" data-location-id="${loc.id}"><div class="item-title">${loc.location_name || `${loc.city} location`}</div><div class="item-sub">${loc.address_line}, ${loc.city}, ${loc.country}</div></article>`).join('');
+    : b.locations.map((loc, index) => `<article class="item ${state.selectedLocation?.id === loc.id ? 'active' : ''}" data-location-id="${loc.id}"><div class="item-title">${compactLocationLabel(b.name, loc, index)}</div><div class="item-sub">${loc.address_line}, ${loc.city}, ${loc.country}</div></article>`).join('');
 };
 
 const renderSelectedLocationMeta = () => {
   $('selectedLocationMeta').textContent = state.selectedLocation
-    ? `Selected: ${state.selectedLocation.location_name || state.selectedLocation.id} (${state.selectedLocation.city}, ${state.selectedLocation.country})`
+    ? `Selected: ${compactLocationLabel(state.selectedBusiness?.name || '', state.selectedLocation)} (${state.selectedLocation.city}, ${state.selectedLocation.country})`
     : 'No location selected.';
 };
 

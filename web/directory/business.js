@@ -156,6 +156,23 @@ const mapUrlFor = (loc) => {
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
 };
 
+const compactLocationLabel = (businessName, loc, index = 0) => {
+  const city = String(loc?.city || '').trim();
+  const raw = String(loc?.location_name || '').trim();
+  if (!raw) return city ? `${city} location` : `Location ${index + 1}`;
+
+  let label = raw;
+  if (businessName) {
+    const escaped = String(businessName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    label = label.replace(new RegExp(`^${escaped}\\s*[-–—,:|]*\\s*`, 'i'), '').trim();
+  }
+
+  if (/^\(?main\)?$/i.test(label) || /^main\s+location$/i.test(label)) return 'Main location';
+  if (!label) return city ? `${city} location` : 'Main location';
+  if (city && label.toLowerCase() === city.toLowerCase()) return `${city} location`;
+  return label;
+};
+
 const renderBusiness = (b) => {
   $('bizPageTitle').textContent = b.name || 'Business';
   $('bizHeaderMeta').innerHTML = `
@@ -203,8 +220,8 @@ const renderBusiness = (b) => {
   $('bizLocations').innerHTML = (b.locations || []).length
     ? b.locations
         .map(
-          (loc) =>
-            `<article class="item"><div class="item-title">${loc.location_name || `${loc.city} location`}</div><div class="item-sub">${loc.address_line}, ${loc.city}, ${loc.country}</div><div class="row gap-sm"><a class="chip link-chip" target="_blank" rel="noopener" href="${mapUrlFor(loc)}">Map</a>${loc.location_phone ? `<a class="chip link-chip" href="tel:${loc.location_phone}">${loc.location_phone}</a>` : ''}${loc.location_email ? `<a class="chip link-chip" href="mailto:${loc.location_email}">Email</a>` : ''}</div></article>`
+          (loc, index) =>
+            `<article class="item"><div class="item-title">${compactLocationLabel(b.name, loc, index)}</div><div class="item-sub">${loc.address_line}, ${loc.city}, ${loc.country}</div><div class="row gap-sm"><a class="chip link-chip" target="_blank" rel="noopener" href="${mapUrlFor(loc)}">Map</a>${loc.location_phone ? `<a class="chip link-chip" href="tel:${loc.location_phone}">${loc.location_phone}</a>` : ''}${loc.location_email ? `<a class="chip link-chip" href="mailto:${loc.location_email}">Email</a>` : ''}</div></article>`
         )
         .join('')
     : '<div class="muted">No locations available.</div>';
