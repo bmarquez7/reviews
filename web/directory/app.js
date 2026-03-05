@@ -101,25 +101,21 @@ const setLoggedInUI = (isLoggedIn) => {
   const addBusinessCard = $('addBusinessCard');
   if (addBusinessCard) addBusinessCard.classList.toggle('hidden', !isLoggedIn);
   const authBtn = $('openAuthModal');
-  if (authBtn) authBtn.textContent = isLoggedIn ? 'Account' : 'Login / Sign up';
+  if (authBtn) authBtn.textContent = 'Login';
 };
 
 const syncAdminUI = async () => {
   if (!state.token) {
     setAdminUIVisible(false);
-    $('adminInboxLink')?.classList.add('hidden');
     return;
   }
 
   try {
     const me = await req('/users/me', { headers: authHeaders() });
     const isAdmin = me?.data?.role === 'admin';
-    const canOpenInbox = me?.data?.role === 'admin' || me?.data?.role === 'moderator';
     setAdminUIVisible(isAdmin);
-    $('adminInboxLink')?.classList.toggle('hidden', !canOpenInbox);
   } catch {
     setAdminUIVisible(false);
-    $('adminInboxLink')?.classList.add('hidden');
   }
 };
 
@@ -868,11 +864,6 @@ $('locationsList').addEventListener('click', async (e) => {
 
 document.addEventListener('click', async (e) => {
   if (e.target.id === 'openAuthModal') {
-    if (state.token && isEmbedMode) {
-      const addBusinessCard = $('addBusinessCard');
-      if (addBusinessCard) addBusinessCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return;
-    }
     openAuthModal();
     return;
   }
