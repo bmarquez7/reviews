@@ -228,13 +228,19 @@ const loadTheme = () => {
   applyTheme(theme);
 };
 
+const themeFromInputs = () => ({
+  brand: $('themeBrand').value,
+  bg: $('themeBg').value,
+  card: $('themeCard').value,
+  iconUrl: $('themeIconUrl').value.trim() || THEME_DEFAULTS.iconUrl
+});
+
+const previewTheme = () => {
+  applyTheme(themeFromInputs());
+};
+
 const saveTheme = () => {
-  const theme = {
-    brand: $('themeBrand').value,
-    bg: $('themeBg').value,
-    card: $('themeCard').value,
-    iconUrl: $('themeIconUrl').value.trim() || THEME_DEFAULTS.iconUrl
-  };
+  const theme = themeFromInputs();
   localStorage.setItem('dir.theme', JSON.stringify(theme));
   applyTheme(theme);
 };
@@ -577,10 +583,11 @@ const doSignup = async (payload) => {
 };
 
 $('saveApiBase').addEventListener('click', () => { state.apiBase = $('apiBase').value.trim(); localStorage.setItem('dir.apiBase', state.apiBase); showToast('ok', 'API base saved'); });
-$('themeBrand').addEventListener('input', saveTheme);
-$('themeBg').addEventListener('input', saveTheme);
-$('themeCard').addEventListener('input', saveTheme);
-$('themeIconUrl').addEventListener('change', saveTheme);
+$('themeBrand').addEventListener('input', previewTheme);
+$('themeBg').addEventListener('input', previewTheme);
+$('themeCard').addEventListener('input', previewTheme);
+$('themeIconUrl').addEventListener('input', previewTheme);
+$('saveTheme').addEventListener('click', () => { saveTheme(); showToast('ok', 'Appearance saved'); });
 $('resetTheme').addEventListener('click', () => { localStorage.removeItem('dir.theme'); applyTheme(THEME_DEFAULTS); showToast('ok', 'Theme reset'); });
 
 $('factorSliders').addEventListener('click', (e) => {

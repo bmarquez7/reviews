@@ -9,7 +9,9 @@
   <body>
     <header class="topbar">
       <div class="brand">
-        <img class="brand-logo" src="./assets/new-roots-logo.png" alt="New Roots Albania" />
+        <a class="brand-home" href="./embed.html" aria-label="Back to directory">
+          <img class="brand-logo" src="./assets/new-roots-logo.png" alt="New Roots Albania" />
+        </a>
         <h1>New Roots Albania Reviews</h1>
       </div>
       <div class="api-base-wrap admin-only hidden">
@@ -161,6 +163,7 @@
           <label>Background color <input id="themeBg" type="color" value="#f5f2eb" /></label>
           <label>Card color <input id="themeCard" type="color" value="#fffdf7" /></label>
           <label>Review icon URL <input id="themeIconUrl" type="text" value="./assets/new-roots-logo.png" /></label>
+          <button id="saveTheme" type="button">Save Changes</button>
           <button id="resetTheme" type="button">Reset Theme</button>
         </div>
       </section>
