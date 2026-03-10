@@ -43,7 +43,11 @@
         <div class="row gap-sm">
           <input id="businessSearch" type="text" placeholder="Search business name..." />
         </div>
-        <div id="categoryChips" class="chips"></div>
+        <div class="row gap-sm" style="margin-top:0.5rem;">
+          <select id="categorySelect" aria-label="Filter by category">
+            <option value="">All categories</option>
+          </select>
+        </div>
         <div id="businessesList" class="list"></div>
         <div class="business-pager row between center">
           <button id="businessPrev" type="button">Previous</button>

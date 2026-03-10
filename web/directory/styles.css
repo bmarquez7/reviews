@@ -89,6 +89,14 @@ button:hover { filter: brightness(1.05); }
 .search-options {
   margin-top: 0.65rem;
 }
+.search-options .row {
+  justify-content: center;
+  margin-top: 0.35rem;
+}
+.search-options select {
+  min-width: 260px;
+  max-width: 100%;
+}
 .alpha-chips {
   margin-top: 0.3rem;
 }

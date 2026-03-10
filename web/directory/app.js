@@ -56,7 +56,12 @@ const state = {
   selectedBusiness: null,
   selectedLocation: null,
   selectedBusinessLocations: [],
-  factors: Object.fromEntries(FACTORS.map(([key]) => [key, 4.5]))
+  factors: Object.fromEntries(FACTORS.map(([key]) => [key, 4.5])),
+  featuredPool: [],
+  featuredTimer: null,
+  featuredRotateMs: 20000,
+  featuredPageSize: 20,
+  featuredMode: false
 };
 
 if ($('apiBase')) $('apiBase').value = state.apiBase;
@@ -279,11 +284,23 @@ const renderSliders = () => {
 };
 
 const renderCategoryChips = () => {
-  $('categoryChips').innerHTML = state.categories.length
-    ? state.categories
-        .map((c) => `<button type="button" class="chip ${state.selectedCategoryId === c.id ? 'active' : ''}" data-category-id="${c.id}">${c.slug}</button>`)
-        .join('')
-    : '<span class="muted">Load categories to display chips.</span>';
+  const select = $('categorySelect');
+  if (select) {
+    const options = ['<option value="">All categories</option>']
+      .concat(state.categories.map((c) => `<option value="${c.id}">${c.slug}</option>`))
+      .join('');
+    select.innerHTML = options;
+    select.value = state.selectedCategoryId || '';
+  }
+
+  const chips = $('categoryChips');
+  if (chips) {
+    chips.innerHTML = state.categories.length
+      ? state.categories
+          .map((c) => `<button type="button" class="chip ${state.selectedCategoryId === c.id ? 'active' : ''}" data-category-id="${c.id}">${c.slug}</button>`)
+          .join('')
+      : '<span class="muted">Load categories to display chips.</span>';
+  }
 };
 
 const renderAlphaChips = () => {
@@ -296,16 +313,80 @@ const renderAlphaChips = () => {
   ].join('');
 };
 
+const stopFeaturedRotation = () => {
+  if (state.featuredTimer) {
+    clearInterval(state.featuredTimer);
+    state.featuredTimer = null;
+  }
+};
+
+const randomPick = (items, count) => {
+  const pool = [...items];
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = pool[i];
+    pool[i] = pool[j];
+    pool[j] = tmp;
+  }
+  return pool.slice(0, count);
+};
+
+const rotateFeaturedNow = () => {
+  if (!state.featuredPool.length) return;
+  state.featuredMode = true;
+  state.businesses = randomPick(state.featuredPool, Math.max(20, state.featuredPageSize));
+  state.businessTotal = state.featuredPool.length;
+  renderBusinesses();
+};
+
+const startFeaturedRotation = () => {
+  stopFeaturedRotation();
+  state.featuredTimer = setInterval(() => {
+    if (!state.featuredMode) return;
+    rotateFeaturedNow();
+  }, state.featuredRotateMs);
+};
+
+const loadFeaturedPool = async () => {
+  if (state.featuredPool.length >= 20) return;
+  const pageSize = 50;
+  const maxPages = 6;
+  const all = [];
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const data = await req(`/businesses?page=${page}&page_size=${pageSize}&sort=top_rated`);
+    const items = data?.data?.items || [];
+    all.push(...items);
+    if (items.length < pageSize) break;
+  }
+
+  const seen = new Set();
+  state.featuredPool = all.filter((b) => {
+    if (!b?.id || seen.has(b.id)) return false;
+    seen.add(b.id);
+    return true;
+  });
+};
+
 const renderBusinesses = () => {
   const search = $('businessSearch')?.value.trim() || '';
   const canBrowse = !!search || !!state.selectedCategoryId || !!state.alphaFilter || !isEmbedMode;
   if (!canBrowse) {
-    $('businessesList').innerHTML = '<div class="muted">Start typing to search businesses.</div>';
-    $('businessPageInfo').textContent = 'Search to view businesses';
+    if (state.featuredMode && state.businesses.length) {
+      $('businessesList').innerHTML = state.businesses
+        .map((b) => `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${b.id}"><div class="item-title">${b.name}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${b.scores?.weighted_overall_display ?? 'n/a'} / 5</span></div><div class="item-sub">Reviews: ${b.scores?.business_rating_count ?? 0}</div><div class="item-sub">Locations: ${b.locations_count ?? 0}</div></article>`)
+        .join('');
+      $('businessPageInfo').textContent = `Showing 20 random places (rotates every 20s)`;
+    } else {
+      $('businessesList').innerHTML = '<div class="muted">Loading featured places...</div>';
+      $('businessPageInfo').textContent = 'Loading featured places';
+    }
     $('businessPrev').disabled = true;
     $('businessNext').disabled = true;
     return;
   }
+
+  state.featuredMode = false;
 
   $('businessesList').innerHTML = !state.businesses.length
     ? '<div class="muted">No businesses found.</div>'
@@ -493,11 +574,16 @@ const loadBusinesses = async () => {
   const search = $('businessSearch').value.trim();
   const canBrowse = !!search || !!state.selectedCategoryId || !!state.alphaFilter || !isEmbedMode;
   if (!canBrowse) {
-    state.businesses = [];
-    state.businessTotal = 0;
+    state.selectedBusiness = null;
+    state.selectedLocation = null;
+    await loadFeaturedPool();
+    rotateFeaturedNow();
+    startFeaturedRotation();
     renderBusinesses();
     return;
   }
+  stopFeaturedRotation();
+  state.featuredMode = false;
   const params = new URLSearchParams({
     page: String(state.businessPage),
     page_size: String(state.businessPageSize),
@@ -771,9 +857,10 @@ $('businessSearch').addEventListener('input', () => {
   const search = $('businessSearch').value.trim();
   const canBrowse = !!search || !!state.selectedCategoryId || !!state.alphaFilter || !isEmbedMode;
   if (!canBrowse) {
-    state.businesses = [];
-    state.businessTotal = 0;
-    renderBusinesses();
+    state.businessPage = 1;
+    loadBusinesses().catch((err) => {
+      showToast('err', errMsg(err));
+    });
     return;
   }
   state.businessSearchDebounce = setTimeout(async () => {
@@ -795,19 +882,36 @@ $('businessSearch').addEventListener('keydown', async (e) => {
     showToast('err', errMsg(err));
   }
 });
-$('categoryChips').addEventListener('click', async (e) => {
-  const chip = e.target.closest('[data-category-id]');
-  if (!chip) return;
-  const clickedId = chip.dataset.categoryId;
-  state.selectedCategoryId = state.selectedCategoryId === clickedId ? null : clickedId;
-  state.businessPage = 1;
-  renderCategoryChips();
-  try {
-    await loadBusinesses();
-  } catch (err) {
-    showToast('err', errMsg(err));
-  }
-});
+const categorySelect = $('categorySelect');
+if (categorySelect) {
+  categorySelect.addEventListener('change', async (e) => {
+    state.selectedCategoryId = e.target.value || null;
+    state.businessPage = 1;
+    renderCategoryChips();
+    try {
+      await loadBusinesses();
+    } catch (err) {
+      showToast('err', errMsg(err));
+    }
+  });
+}
+
+const categoryChips = $('categoryChips');
+if (categoryChips) {
+  categoryChips.addEventListener('click', async (e) => {
+    const chip = e.target.closest('[data-category-id]');
+    if (!chip) return;
+    const clickedId = chip.dataset.categoryId;
+    state.selectedCategoryId = state.selectedCategoryId === clickedId ? null : clickedId;
+    state.businessPage = 1;
+    renderCategoryChips();
+    try {
+      await loadBusinesses();
+    } catch (err) {
+      showToast('err', errMsg(err));
+    }
+  });
+}
 const alphaHost = $('alphaChips');
 if (alphaHost) {
   alphaHost.addEventListener('click', async (e) => {
@@ -1066,5 +1170,5 @@ $('businessImageForm').addEventListener('submit', async (e) => {
   renderSliders();
   renderAlphaChips();
   try { await loadCategories(); } catch {}
-  renderBusinesses();
+  try { await loadBusinesses(); } catch { renderBusinesses(); }
 })();
