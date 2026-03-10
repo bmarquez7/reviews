@@ -129,6 +129,10 @@ const openImageLightbox = (url) => {
 };
 
 const closeImageLightbox = () => $('imageLightbox').classList.add('hidden');
+const openReviewModal = () => $('reviewModal')?.classList.remove('hidden');
+const closeReviewModal = () => $('reviewModal')?.classList.add('hidden');
+const openClaimModal = () => $('claimModal')?.classList.remove('hidden');
+const closeClaimModal = () => $('claimModal')?.classList.add('hidden');
 
 const syncAdminLink = async () => {
   const link = $('bizAdminLink');
@@ -573,6 +577,14 @@ $('logout').addEventListener('click', () => {
   showToast('ok', 'Logged out');
 });
 
+$('openReviewModal')?.addEventListener('click', () => {
+  openReviewModal();
+});
+
+$('openClaimModal')?.addEventListener('click', () => {
+  openClaimModal();
+});
+
 const hoursLocationSelect = $('hoursLocationId');
 if (hoursLocationSelect) {
   hoursLocationSelect.addEventListener('change', (e) => {
@@ -733,6 +745,7 @@ if (reviewForm) {
       if ($('reviewImages')) $('reviewImages').value = '';
       if ($('reviewComment')) $('reviewComment').value = '';
       showToast('ok', files.length ? `Review submitted with ${files.length} image(s).` : 'Review submitted.');
+      closeReviewModal();
       state.page = 1;
       await loadReviews();
     } catch (err) {
@@ -759,6 +772,7 @@ $('claimForm').addEventListener('submit', async (e) => {
       body: JSON.stringify(body)
     });
     showToast('ok', data?.data?.status === 'already_owner' ? 'You already own this business.' : 'Claim request submitted.');
+    closeClaimModal();
   } catch (err) {
     showToast('err', errMsg(err));
   }
@@ -900,6 +914,8 @@ $('reviewsNext').addEventListener('click', async () => {
 document.addEventListener('click', (e) => {
   if (e.target.id === 'imageLightbox') closeImageLightbox();
   if (e.target.id === 'imageLightboxClose') closeImageLightbox();
+  if (e.target.id === 'reviewModal' || e.target.id === 'reviewModalClose') closeReviewModal();
+  if (e.target.id === 'claimModal' || e.target.id === 'claimModalClose') closeClaimModal();
   const galleryBtn = e.target.closest('[data-gallery-index]');
   if (galleryBtn) {
     const idx = Number(galleryBtn.dataset.galleryIndex);

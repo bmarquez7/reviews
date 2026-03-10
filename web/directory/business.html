@@ -44,13 +44,39 @@
         <div id="bizLinks" class="chips"></div>
       </section>
 
-      <section class="card profile-right">
-        <h2>Claim Business</h2>
-        <p class="muted">Only one verified owner account can claim this listing.</p>
-        <form id="claimForm" class="grid2">
-          <input id="claimMessage" type="text" placeholder="Explain ownership proof and contact details" />
-          <button type="submit">Request Claim</button>
+      <section id="section-hours" class="card profile-left section-anchor">
+        <h2>Hours</h2>
+        <p class="muted">Any logged-in user can add or update hours.</p>
+        <form id="hoursForm" class="grid2">
+          <select id="hoursLocationId">
+            <option value="">Select location</option>
+          </select>
+          <input id="hoursMonday" type="text" placeholder="Monday (e.g. 09:00-18:00 or Closed)" />
+          <input id="hoursTuesday" type="text" placeholder="Tuesday" />
+          <input id="hoursWednesday" type="text" placeholder="Wednesday" />
+          <input id="hoursThursday" type="text" placeholder="Thursday" />
+          <input id="hoursFriday" type="text" placeholder="Friday" />
+          <input id="hoursSaturday" type="text" placeholder="Saturday" />
+          <input id="hoursSunday" type="text" placeholder="Sunday" />
+          <button type="submit">Save Hours</button>
         </form>
+        <div id="bizHours" class="list small"></div>
+      </section>
+
+      <section id="section-location" class="card profile-left section-anchor">
+        <h2>Location</h2>
+        <div id="bizLocations" class="list small"></div>
+      </section>
+
+      <section class="card profile-full action-launchers">
+        <div class="actions center-actions action-launcher-row">
+          <button id="openReviewModal" type="button">Leave a Review</button>
+          <button id="openClaimModal" type="button">Claim Business</button>
+        </div>
+      </section>
+
+      <section class="card profile-full">
+        <h2>Account + Business Tools</h2>
         <h3>Request New Location (Pending Verification)</h3>
         <p class="muted">Business accounts can submit a location request for admin verification.</p>
         <form id="locationRequestForm" class="grid2">
@@ -98,42 +124,7 @@
         </section>
       </section>
 
-      <section id="section-hours" class="card profile-left section-anchor">
-        <h2>Hours</h2>
-        <p class="muted">Any logged-in user can add or update hours.</p>
-        <form id="hoursForm" class="grid2">
-          <select id="hoursLocationId">
-            <option value="">Select location</option>
-          </select>
-          <input id="hoursMonday" type="text" placeholder="Monday (e.g. 09:00-18:00 or Closed)" />
-          <input id="hoursTuesday" type="text" placeholder="Tuesday" />
-          <input id="hoursWednesday" type="text" placeholder="Wednesday" />
-          <input id="hoursThursday" type="text" placeholder="Thursday" />
-          <input id="hoursFriday" type="text" placeholder="Friday" />
-          <input id="hoursSaturday" type="text" placeholder="Saturday" />
-          <input id="hoursSunday" type="text" placeholder="Sunday" />
-          <button type="submit">Save Hours</button>
-        </form>
-        <div id="bizHours" class="list small"></div>
-      </section>
-
-      <section id="section-location" class="card profile-left section-anchor">
-        <h2>Location</h2>
-        <div id="bizLocations" class="list small"></div>
-      </section>
-
       <section id="section-reviews" class="card profile-full section-anchor">
-        <h2>Write a Review</h2>
-        <p class="muted">Login as a customer to submit one review per location and upload photos.</p>
-        <form id="reviewForm" class="grid2">
-          <select id="reviewLocationId" required>
-            <option value="">Select location to review</option>
-          </select>
-          <input id="reviewComment" type="text" placeholder="Comment (minimum 10 words)" required />
-          <input id="reviewImages" type="file" accept="image/*" multiple />
-          <button type="submit">Submit Review + Photos</button>
-        </form>
-        <div id="reviewFactors" class="factor-grid" style="margin-top:0.6rem;"></div>
         <h2>Ratings Overview</h2>
         <div id="ratingSummary" class="chips"></div>
         <div id="ratingDistribution" class="chips"></div>
@@ -154,6 +145,39 @@
           <button id="imageLightboxClose" type="button">Close</button>
         </div>
         <img id="imageLightboxImg" class="lightbox-image" alt="Preview" />
+      </div>
+    </div>
+
+    <div id="reviewModal" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Leave a review">
+      <div class="overlay-card">
+        <div class="row between center">
+          <h2>Leave a Review</h2>
+          <button id="reviewModalClose" type="button">Close</button>
+        </div>
+        <p class="muted">Login as a customer to submit one review per location and upload photos.</p>
+        <form id="reviewForm" class="grid2">
+          <select id="reviewLocationId" required>
+            <option value="">Select location to review</option>
+          </select>
+          <input id="reviewComment" type="text" placeholder="Comment (minimum 10 words)" required />
+          <input id="reviewImages" type="file" accept="image/*" multiple />
+          <button type="submit">Submit Review + Photos</button>
+        </form>
+        <div id="reviewFactors" class="factor-grid" style="margin-top:0.6rem;"></div>
+      </div>
+    </div>
+
+    <div id="claimModal" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Claim business">
+      <div class="overlay-card">
+        <div class="row between center">
+          <h2>Claim Business</h2>
+          <button id="claimModalClose" type="button">Close</button>
+        </div>
+        <p class="muted">Only one verified owner account can claim this listing.</p>
+        <form id="claimForm" class="grid2">
+          <input id="claimMessage" type="text" placeholder="Explain ownership proof and contact details" />
+          <button type="submit">Request Claim</button>
+        </form>
       </div>
     </div>
 

@@ -381,6 +381,13 @@ select {
 .business-page .profile-right { grid-column: span 4; }
 .business-page .profile-full { grid-column: span 12; }
 .business-page .layout { align-items: start; }
+.business-page #section-overview,
+.business-page #section-hours,
+.business-page #section-location {
+  grid-column: span 4;
+  aspect-ratio: 1 / 1;
+  overflow: auto;
+}
 .add-business-card { grid-column: span 12; }
 .hero-grid { margin-top: 0.7rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .business-page .hero-grid .media-thumb { aspect-ratio: 16 / 9; }
@@ -437,6 +444,23 @@ select {
 
 .section-anchor {
   scroll-margin-top: 150px;
+}
+
+.action-launchers {
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+}
+
+.action-launcher-row {
+  justify-content: center;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.action-launcher-row button {
+  min-width: 220px;
+  justify-content: center;
+  text-align: center;
 }
 
 .embed-mode .layout {
@@ -516,4 +540,11 @@ select {
   .business-page .profile-right,
   .business-page .profile-full,
   .business-page .profile-hero { grid-column: span 12; }
+  .business-page #section-overview,
+  .business-page #section-hours,
+  .business-page #section-location {
+    grid-column: span 12;
+    aspect-ratio: auto;
+    overflow: visible;
+  }
 }
