@@ -29,6 +29,42 @@ const buildRatingDistribution = (scores: number[]) => {
   return Array.from(bins.entries()).map(([score, count]) => ({ score, count }));
 };
 
+const parseImportedGoogleScore = (description?: string | null) => {
+  if (!description) return null;
+  const match = description.match(/rating\s+([0-5](?:\.\d+)?)\s+with\s+(\d+)\s+reviews?/i);
+  if (!match) return null;
+  const rating = Number(match[1]);
+  const count = Number(match[2]);
+  if (!Number.isFinite(rating) || !Number.isFinite(count)) return null;
+  const safeRating = Math.max(0, Math.min(5, rating));
+  const safeCount = Math.max(0, Math.round(count));
+  return { rating: safeRating, count: safeCount };
+};
+
+const withGoogleScoreFallback = (
+  score: {
+    business_id?: string;
+    business_rating_count?: number | null;
+    weighted_overall_raw?: number | null;
+    weighted_overall_display?: number | null;
+    unweighted_overall_raw?: number | null;
+    unweighted_overall_display?: number | null;
+  } | null | undefined,
+  business: { id?: string; description?: string | null }
+) => {
+  if (score && Number(score.business_rating_count || 0) > 0) return score;
+  const parsed = parseImportedGoogleScore(business.description);
+  if (!parsed) return score;
+  return {
+    business_id: score?.business_id ?? business.id,
+    business_rating_count: parsed.count,
+    weighted_overall_raw: parsed.rating,
+    weighted_overall_display: Math.round(parsed.rating * 2) / 2,
+    unweighted_overall_raw: parsed.rating,
+    unweighted_overall_display: Math.round(parsed.rating * 2) / 2
+  };
+};
+
 export const directoryRoutes: FastifyPluginAsync = async (app) => {
   try {
     await Promise.all([ensureMediaBucket(BUSINESS_MEDIA_BUCKET), ensureMediaBucket(REVIEW_MEDIA_BUCKET)]);
@@ -87,7 +123,7 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
 
     let q = supabaseAdmin
       .from('businesses')
-      .select('id,name,created_at,status', { count: 'exact' })
+      .select('id,name,description,created_at,status', { count: 'exact' })
       .eq('status', 'active');
 
     if (query.q) q = q.ilike('name', `%${query.q}%`);
@@ -164,7 +200,7 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
     });
 
     const items = filteredItems.map((business) => {
-      const score = scoresByBusiness.get(business.id);
+      const score = withGoogleScoreFallback(scoresByBusiness.get(business.id), business);
       return {
         id: business.id,
         name: business.name,
@@ -241,12 +277,13 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const mediaUrls = await listPublicMedia(BUSINESS_MEDIA_BUCKET, `business/${params.businessId}/`, 12);
+    const resolvedScore = withGoogleScoreFallback(scoreRes.data ?? null, businessRes.data);
 
     return {
       data: {
         ...businessRes.data,
         categories: categoryRes.data ?? [],
-        scores: scoreRes.data ?? null,
+        scores: resolvedScore ?? null,
         locations: locationRes.data ?? [],
         media_urls: mediaUrls
       }

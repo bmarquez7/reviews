@@ -10,6 +10,16 @@ const FACTORS = [
   ['cleanliness', 'Cleanliness']
 ];
 
+const HOURS_DAYS = [
+  ['monday', 'hoursMonday'],
+  ['tuesday', 'hoursTuesday'],
+  ['wednesday', 'hoursWednesday'],
+  ['thursday', 'hoursThursday'],
+  ['friday', 'hoursFriday'],
+  ['saturday', 'hoursSaturday'],
+  ['sunday', 'hoursSunday']
+];
+
 const THEME_DEFAULTS = { brand: '#0f6a4d', bg: '#f5f2eb', card: '#fffdf7', iconUrl: './assets/new-roots-logo.png' };
 const PROD_API_BASE = 'https://grow-albania-directory-api.onrender.com/v1';
 
@@ -22,7 +32,12 @@ const state = {
   pageSize: 10,
   total: 0,
   reviewLocationId: null,
-  reviewFactors: Object.fromEntries(FACTORS.map(([key]) => [key, 5]))
+  reviewFactors: Object.fromEntries(FACTORS.map(([key]) => [key, 5])),
+  business: null,
+  hoursLocationId: null,
+  galleryUrls: [],
+  galleryIndex: 0,
+  galleryTimer: null
 };
 
 const authHeaders = () => (state.token ? { Authorization: `Bearer ${state.token}` } : {});
@@ -233,18 +248,175 @@ const renderReviewLocationOptions = (business) => {
   select.value = current || '';
 };
 
+const emptyHours = () =>
+  Object.fromEntries(HOURS_DAYS.map(([day]) => [day, '']));
+
+const parseWeekdayTextHours = (weekdayText) => {
+  const out = emptyHours();
+  for (const line of weekdayText || []) {
+    const text = String(line || '');
+    const match = text.match(/^\s*([A-Za-z]+)\s*:\s*(.+)\s*$/);
+    if (!match) continue;
+    const day = match[1].toLowerCase();
+    if (!(day in out)) continue;
+    out[day] = match[2].trim();
+  }
+  return out;
+};
+
+const normalizeLocationHours = (rawHours) => {
+  if (!rawHours || typeof rawHours !== 'object') return emptyHours();
+  const out = emptyHours();
+
+  if (Array.isArray(rawHours.weekday_text)) {
+    return { ...out, ...parseWeekdayTextHours(rawHours.weekday_text) };
+  }
+
+  const aliases = {
+    mon: 'monday',
+    tue: 'tuesday',
+    tues: 'tuesday',
+    wed: 'wednesday',
+    thu: 'thursday',
+    thur: 'thursday',
+    thurs: 'thursday',
+    fri: 'friday',
+    sat: 'saturday',
+    sun: 'sunday'
+  };
+
+  for (const [key, value] of Object.entries(rawHours)) {
+    const lowered = String(key).toLowerCase().trim();
+    const mapped = aliases[lowered] || lowered;
+    if (!(mapped in out)) continue;
+    out[mapped] = typeof value === 'string' ? value.trim() : String(value ?? '').trim();
+  }
+
+  return out;
+};
+
+const formatHoursLine = (hoursMap, day) => {
+  const text = String(hoursMap?.[day] || '').trim();
+  return text || 'Not set';
+};
+
+const stopGalleryRotation = () => {
+  if (state.galleryTimer) {
+    clearInterval(state.galleryTimer);
+    state.galleryTimer = null;
+  }
+};
+
+const setFeaturedImageByIndex = (index) => {
+  if (!state.galleryUrls.length) return;
+  state.galleryIndex = ((index % state.galleryUrls.length) + state.galleryUrls.length) % state.galleryUrls.length;
+  const featured = $('bizFeaturedImage');
+  if (featured) featured.src = state.galleryUrls[state.galleryIndex];
+  document.querySelectorAll('[data-gallery-index]').forEach((node) => {
+    const active = Number(node.dataset.galleryIndex) === state.galleryIndex;
+    node.classList.toggle('active', active);
+  });
+};
+
+const startGalleryRotation = () => {
+  stopGalleryRotation();
+  if (state.galleryUrls.length < 2) return;
+  state.galleryTimer = setInterval(() => {
+    setFeaturedImageByIndex(state.galleryIndex + 1);
+  }, 5000);
+};
+
+const renderBusinessGallery = (urls = []) => {
+  state.galleryUrls = Array.isArray(urls) ? urls.filter(Boolean) : [];
+  state.galleryIndex = 0;
+  const featuredWrap = $('bizFeatured');
+  const gallery = $('bizGallery');
+  if (!gallery || !featuredWrap) return;
+
+  if (!state.galleryUrls.length) {
+    stopGalleryRotation();
+    featuredWrap.classList.add('hidden');
+    gallery.innerHTML = '<div class="muted">No photos yet.</div>';
+    return;
+  }
+
+  featuredWrap.classList.remove('hidden');
+  setFeaturedImageByIndex(0);
+  gallery.innerHTML = state.galleryUrls
+    .map(
+      (url, idx) =>
+        `<button type="button" class="media-link" data-gallery-index="${idx}" data-image-url="${url}"><img class="media-thumb" src="${url}" alt="Business photo ${idx + 1}" loading="lazy" /></button>`
+    )
+    .join('');
+  setFeaturedImageByIndex(0);
+  startGalleryRotation();
+};
+
+const renderHoursSummary = (business) => {
+  const root = $('bizHours');
+  if (!root) return;
+  const locations = business?.locations || [];
+  if (!locations.length) {
+    root.innerHTML = '<div class="muted">No locations available.</div>';
+    return;
+  }
+
+  root.innerHTML = locations
+    .map((loc, index) => {
+      const map = normalizeLocationHours(loc.location_hours);
+      const lines = HOURS_DAYS.map(([day]) => `<div class="item-sub"><strong>${day[0].toUpperCase() + day.slice(1)}:</strong> ${formatHoursLine(map, day)}</div>`).join('');
+      return `
+        <article class="item">
+          <div class="item-title">${compactLocationLabel(business.name, loc, index)}</div>
+          ${lines}
+        </article>
+      `;
+    })
+    .join('');
+};
+
+const renderHoursLocationOptions = (business) => {
+  const select = $('hoursLocationId');
+  if (!select) return;
+  const locations = business?.locations || [];
+  const selected = state.hoursLocationId && locations.some((loc) => loc.id === state.hoursLocationId)
+    ? state.hoursLocationId
+    : (locations[0]?.id || '');
+  state.hoursLocationId = selected || null;
+  select.innerHTML = ['<option value="">Select location</option>']
+    .concat(locations.map((loc, index) => `<option value="${loc.id}">${compactLocationLabel(business?.name || '', loc, index)} · ${loc.city || ''}</option>`))
+    .join('');
+  select.value = selected || '';
+};
+
+const fillHoursFormFromSelectedLocation = () => {
+  const location = (state.business?.locations || []).find((loc) => loc.id === state.hoursLocationId);
+  const hoursMap = normalizeLocationHours(location?.location_hours);
+  for (const [day, inputId] of HOURS_DAYS) {
+    const input = $(inputId);
+    if (!input) continue;
+    input.value = hoursMap[day] || '';
+  }
+};
+
+const buildHoursPayloadFromForm = () => {
+  const payload = {};
+  for (const [day, inputId] of HOURS_DAYS) {
+    const value = String($(inputId)?.value || '').trim();
+    payload[day] = value;
+  }
+  return payload;
+};
+
 const renderBusiness = (b) => {
+  state.business = b;
   $('bizPageTitle').textContent = b.name || 'Business';
   $('bizHeaderMeta').innerHTML = `
     <div class="row gap-sm center">${logoRatingMarkup(b.scores?.weighted_overall_display)}<strong>${b.scores?.weighted_overall_display ?? 'n/a'} / 5</strong> <span class="muted">(${b.scores?.business_rating_count ?? 0} reviews)</span></div>
     <div class="muted">${b.is_claimed ? 'Claimed' : 'Unclaimed'} • ${b.categories?.map((c) => c.categories?.slug || c.slug || '').filter(Boolean).join(', ') || 'General'}</div>
   `;
 
-  $('bizGallery').innerHTML = (b.media_urls || []).length
-    ? b.media_urls
-        .map((url) => `<button type="button" class="media-link" data-image-url="${url}"><img class="media-thumb" src="${url}" alt="Business photo" /></button>`)
-        .join('')
-    : '<div class="muted">No photos yet.</div>';
+  renderBusinessGallery(b.media_urls || []);
 
   const primaryLoc = b.locations?.[0];
   const links = [];
@@ -286,6 +458,9 @@ const renderBusiness = (b) => {
         .join('')
     : '<div class="muted">No locations available.</div>';
 
+  renderHoursSummary(b);
+  renderHoursLocationOptions(b);
+  fillHoursFormFromSelectedLocation();
   renderReviewLocationOptions(b);
 };
 
@@ -397,6 +572,48 @@ $('logout').addEventListener('click', () => {
   void syncAdminLink();
   showToast('ok', 'Logged out');
 });
+
+const hoursLocationSelect = $('hoursLocationId');
+if (hoursLocationSelect) {
+  hoursLocationSelect.addEventListener('change', (e) => {
+    state.hoursLocationId = e.target.value || null;
+    fillHoursFormFromSelectedLocation();
+  });
+}
+
+const hoursForm = $('hoursForm');
+if (hoursForm) {
+  hoursForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!state.token) {
+      showToast('err', 'Login first to save hours.');
+      return;
+    }
+
+    const locationId = state.hoursLocationId || $('hoursLocationId')?.value;
+    if (!locationId) {
+      showToast('err', 'Select a location first.');
+      return;
+    }
+
+    try {
+      const payload = { location_hours: buildHoursPayloadFromForm() };
+      await req(`/businesses/${businessId}/locations/${locationId}`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify(payload)
+      });
+      showToast('ok', 'Hours saved');
+      await loadBusiness();
+    } catch (err) {
+      if (err?.error?.code === 'POLICIES_NOT_ACCEPTED') {
+        showToast('err', 'Accept policies first, then update hours.');
+      } else {
+        showToast('err', errMsg(err));
+      }
+    }
+  });
+}
 
 const reviewLocationSelect = $('reviewLocationId');
 if (reviewLocationSelect) {
@@ -683,8 +900,20 @@ $('reviewsNext').addEventListener('click', async () => {
 document.addEventListener('click', (e) => {
   if (e.target.id === 'imageLightbox') closeImageLightbox();
   if (e.target.id === 'imageLightboxClose') closeImageLightbox();
+  const galleryBtn = e.target.closest('[data-gallery-index]');
+  if (galleryBtn) {
+    const idx = Number(galleryBtn.dataset.galleryIndex);
+    if (Number.isFinite(idx)) {
+      setFeaturedImageByIndex(idx);
+      startGalleryRotation();
+    }
+  }
   const mediaBtn = e.target.closest('[data-image-url]');
   if (mediaBtn) openImageLightbox(mediaBtn.dataset.imageUrl);
+});
+
+window.addEventListener('beforeunload', () => {
+  stopGalleryRotation();
 });
 
 (async () => {

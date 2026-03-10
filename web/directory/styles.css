@@ -255,6 +255,10 @@ button:hover { filter: brightness(1.05); }
   display: block;
   width: 100%;
 }
+.media-link.active .media-thumb {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
 
 .overlay {
   position: fixed;
@@ -376,9 +380,30 @@ select {
 .business-page .profile-left { grid-column: span 8; }
 .business-page .profile-right { grid-column: span 4; }
 .business-page .profile-full { grid-column: span 12; }
+.business-page .layout { align-items: start; }
 .add-business-card { grid-column: span 12; }
 .hero-grid { margin-top: 0.7rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .business-page .hero-grid .media-thumb { aspect-ratio: 16 / 9; }
+.featured-media {
+  margin-top: 0.7rem;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #d9dfe9;
+  background: #eef2f8;
+}
+.featured-image {
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  display: block;
+}
+.business-page .hero-grid {
+  margin-top: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+.business-page .hero-grid .media-thumb {
+  aspect-ratio: 4 / 3;
+}
 
 .profile-tabs-card {
   grid-column: span 12;

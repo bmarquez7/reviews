@@ -23,6 +23,9 @@
     <main class="layout">
       <section class="card profile-hero">
         <div id="bizHeaderMeta" class="muted">Loading business...</div>
+        <div id="bizFeatured" class="featured-media hidden">
+          <img id="bizFeaturedImage" class="featured-image" alt="Featured business photo" />
+        </div>
         <div id="bizGallery" class="media-grid hero-grid"></div>
       </section>
 
@@ -97,6 +100,20 @@
 
       <section id="section-hours" class="card profile-left section-anchor">
         <h2>Hours</h2>
+        <p class="muted">Any logged-in user can add or update hours.</p>
+        <form id="hoursForm" class="grid2">
+          <select id="hoursLocationId">
+            <option value="">Select location</option>
+          </select>
+          <input id="hoursMonday" type="text" placeholder="Monday (e.g. 09:00-18:00 or Closed)" />
+          <input id="hoursTuesday" type="text" placeholder="Tuesday" />
+          <input id="hoursWednesday" type="text" placeholder="Wednesday" />
+          <input id="hoursThursday" type="text" placeholder="Thursday" />
+          <input id="hoursFriday" type="text" placeholder="Friday" />
+          <input id="hoursSaturday" type="text" placeholder="Saturday" />
+          <input id="hoursSunday" type="text" placeholder="Sunday" />
+          <button type="submit">Save Hours</button>
+        </form>
         <div id="bizHours" class="list small"></div>
       </section>
 

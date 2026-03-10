@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { ApiError } from '../lib/http-errors.js';
 import { supabaseAdmin } from '../lib/supabase.js';
-import { requirePoliciesAccepted, requireRole } from '../lib/auth.js';
+import { requireAuth, requirePoliciesAccepted, requireRole } from '../lib/auth.js';
 
 const createBusinessSchema = z.object({
   name: z.string().min(1),
@@ -450,7 +450,6 @@ export const businessRoutes: FastifyPluginAsync = async (app) => {
       }
     },
     async (request) => {
-      const user = await requireRole(request, ['business_owner', 'admin']);
       const params = z.object({ businessId: z.string().uuid(), locationId: z.string().uuid() }).parse(request.params);
       const body = z
         .object({
@@ -467,8 +466,20 @@ export const businessRoutes: FastifyPluginAsync = async (app) => {
         })
         .parse(request.body);
 
-      if (user.role !== 'admin') {
-        await assertBusinessOwner(user.id, params.businessId);
+      const providedKeys = Object.entries(body)
+        .filter(([, value]) => value !== undefined)
+        .map(([key]) => key);
+      const isHoursOnlyUpdate =
+        providedKeys.length > 0 &&
+        providedKeys.every((key) => key === 'location_hours');
+
+      if (isHoursOnlyUpdate) {
+        await requireAuth(request);
+      } else {
+        const user = await requireRole(request, ['business_owner', 'admin']);
+        if (user.role !== 'admin') {
+          await assertBusinessOwner(user.id, params.businessId);
+        }
       }
 
       const patch: Record<string, unknown> = {};
