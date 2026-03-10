@@ -106,6 +106,17 @@
       </section>
 
       <section id="section-reviews" class="card profile-full section-anchor">
+        <h2>Write a Review</h2>
+        <p class="muted">Login as a customer to submit one review per location and upload photos.</p>
+        <form id="reviewForm" class="grid2">
+          <select id="reviewLocationId" required>
+            <option value="">Select location to review</option>
+          </select>
+          <input id="reviewComment" type="text" placeholder="Comment (minimum 10 words)" required />
+          <input id="reviewImages" type="file" accept="image/*" multiple />
+          <button type="submit">Submit Review + Photos</button>
+        </form>
+        <div id="reviewFactors" class="factor-grid" style="margin-top:0.6rem;"></div>
         <h2>Ratings Overview</h2>
         <div id="ratingSummary" class="chips"></div>
         <div id="ratingDistribution" class="chips"></div>

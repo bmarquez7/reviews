@@ -1,15 +1,34 @@
 const $ = (id) => document.getElementById(id);
 
+const FACTORS = [
+  ['pricing_transparency', 'Pricing transparency'],
+  ['friendliness', 'Friendliness'],
+  ['lgbtq_acceptance', 'LGBTQ+ acceptance'],
+  ['racial_tolerance', 'Racial tolerance'],
+  ['religious_tolerance', 'Religious tolerance'],
+  ['accessibility_friendliness', 'Accessibility friendliness'],
+  ['cleanliness', 'Cleanliness']
+];
+
 const THEME_DEFAULTS = { brand: '#0f6a4d', bg: '#f5f2eb', card: '#fffdf7', iconUrl: './assets/new-roots-logo.png' };
 const PROD_API_BASE = 'https://grow-albania-directory-api.onrender.com/v1';
 
 const params = new URLSearchParams(window.location.search);
 const businessId = params.get('businessId');
 const apiBase = params.get('apiBase') || localStorage.getItem('dir.apiBase') || PROD_API_BASE;
-const state = { token: localStorage.getItem('dir.token') || '', page: 1, pageSize: 10, total: 0 };
+const state = {
+  token: localStorage.getItem('dir.token') || '',
+  page: 1,
+  pageSize: 10,
+  total: 0,
+  reviewLocationId: null,
+  reviewFactors: Object.fromEntries(FACTORS.map(([key]) => [key, 5]))
+};
 
 const authHeaders = () => (state.token ? { Authorization: `Bearer ${state.token}` } : {});
 const errMsg = (err) => err?.error?.message || 'Request failed';
+
+const wordCount = (value) => (String(value || '').trim().match(/\S+/g) || []).length;
 
 const showToast = (type, message) => {
   const host = $('toastHost');
@@ -52,6 +71,31 @@ const logoRatingMarkup = (score) => {
     return `<span class="logo-token" style="--fill:${pct}"></span>`;
   }).join('');
   return `<span class="logo-rating">${items}</span>`;
+};
+
+const renderFactorIcons = (value) => {
+  const safe = Math.max(0, Math.min(5, Number(value)));
+  const stepped = Math.round(safe * 2) / 2;
+  return Array.from({ length: 5 }, (_, i) => {
+    const fill = Math.max(0, Math.min(1, stepped - i));
+    const stepFill = fill >= 1 ? 1 : fill >= 0.5 ? 0.5 : 0;
+    const pct = `${Math.round(stepFill * 100)}%`;
+    return `<span class="logo-token" style="--fill:${pct}" data-slot="${i}" role="button" tabindex="0" aria-label="Set rating"></span>`;
+  }).join('');
+};
+
+const renderReviewFactors = () => {
+  const host = $('reviewFactors');
+  if (!host) return;
+  host.innerHTML = FACTORS.map(([key, label]) => {
+    const value = Number(state.reviewFactors[key] || 0);
+    return `
+      <div class="slider-item">
+        <div class="slider-head"><span>${label}</span><strong id="review-factor-val-${key}">${value.toFixed(1)}</strong></div>
+        <div class="factor-logo-input" data-factor="${key}">${renderFactorIcons(value)}</div>
+      </div>
+    `;
+  }).join('');
 };
 
 const applyTheme = () => {
@@ -173,6 +217,22 @@ const compactLocationLabel = (businessName, loc, index = 0) => {
   return label;
 };
 
+const renderReviewLocationOptions = (business) => {
+  const select = $('reviewLocationId');
+  if (!select) return;
+  const locations = business?.locations || [];
+  const current = state.reviewLocationId && locations.some((loc) => loc.id === state.reviewLocationId)
+    ? state.reviewLocationId
+    : (locations[0]?.id || '');
+  state.reviewLocationId = current || null;
+  select.innerHTML = ['<option value="">Select location to review</option>']
+    .concat(
+      locations.map((loc, index) => `<option value="${loc.id}">${compactLocationLabel(business?.name || '', loc, index)} · ${loc.city || ''}</option>`)
+    )
+    .join('');
+  select.value = current || '';
+};
+
 const renderBusiness = (b) => {
   $('bizPageTitle').textContent = b.name || 'Business';
   $('bizHeaderMeta').innerHTML = `
@@ -225,6 +285,8 @@ const renderBusiness = (b) => {
         )
         .join('')
     : '<div class="muted">No locations available.</div>';
+
+  renderReviewLocationOptions(b);
 };
 
 const renderReviewSummary = (summary, distribution) => {
@@ -335,6 +397,136 @@ $('logout').addEventListener('click', () => {
   void syncAdminLink();
   showToast('ok', 'Logged out');
 });
+
+const reviewLocationSelect = $('reviewLocationId');
+if (reviewLocationSelect) {
+  reviewLocationSelect.addEventListener('change', (e) => {
+    state.reviewLocationId = e.target.value || null;
+  });
+}
+
+const reviewFactorsHost = $('reviewFactors');
+if (reviewFactorsHost) {
+  reviewFactorsHost.addEventListener('click', (e) => {
+    const token = e.target.closest('.logo-token');
+    if (!token) return;
+    const group = token.closest('.factor-logo-input');
+    const key = group?.dataset.factor;
+    if (!key) return;
+
+    const slot = Number(token.dataset.slot);
+    const rect = token.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    let value = Math.max(0, Math.min(5, slot + (clickX < rect.width / 2 ? 0.5 : 1)));
+    if (slot === 0 && clickX < rect.width / 2 && Number(state.reviewFactors[key] ?? 0) <= 0.5) {
+      value = 0;
+    }
+    value = Math.round(value * 2) / 2;
+    state.reviewFactors[key] = value;
+    group.innerHTML = renderFactorIcons(value);
+    const valueNode = $(`review-factor-val-${key}`);
+    if (valueNode) valueNode.textContent = value.toFixed(1);
+  });
+
+  reviewFactorsHost.addEventListener('keydown', (e) => {
+    const token = e.target.closest('.logo-token');
+    if (!token) return;
+    const group = token.closest('.factor-logo-input');
+    const key = group?.dataset.factor;
+    if (!key) return;
+
+    let value = Number(state.reviewFactors[key] ?? 0);
+    let handled = true;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') value += 0.5;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') value -= 0.5;
+    else if (e.key === 'Home') value = 0;
+    else if (e.key === 'End') value = 5;
+    else handled = false;
+
+    if (!handled) return;
+    e.preventDefault();
+
+    value = Math.max(0, Math.min(5, Math.round(value * 2) / 2));
+    state.reviewFactors[key] = value;
+    group.innerHTML = renderFactorIcons(value);
+    const valueNode = $(`review-factor-val-${key}`);
+    if (valueNode) valueNode.textContent = value.toFixed(1);
+  });
+}
+
+const reviewForm = $('reviewForm');
+if (reviewForm) {
+  reviewForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!state.token) {
+      showToast('err', 'Login first to submit a review.');
+      return;
+    }
+
+    const locationId = $('reviewLocationId')?.value || state.reviewLocationId;
+    if (!locationId) {
+      showToast('err', 'Select a location first.');
+      return;
+    }
+
+    const comment = $('reviewComment')?.value.trim() || '';
+    if (wordCount(comment) < 10) {
+      showToast('err', 'Comment must be at least 10 words.');
+      return;
+    }
+
+    try {
+      const now = new Date();
+      const rating = await req(`/locations/${locationId}/ratings/me`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          factors: state.reviewFactors,
+          secondary: {
+            pricing_value: 4.5,
+            child_care_availability: 2.0,
+            child_friendliness: 3.0,
+            party_size_accommodations: 4.0,
+            accessibility_details_score: 4.0,
+            accessibility_notes: 'Submitted from business page form.'
+          }
+        })
+      });
+
+      const posted = await req(`/ratings/${rating.data.rating_id}/comment`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          content: comment,
+          visit_month: now.getUTCMonth() + 1,
+          visit_year: now.getUTCFullYear()
+        })
+      });
+
+      const files = Array.from($('reviewImages')?.files || []).slice(0, 6);
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        await reqForm(`/media/comments/${posted.data.comment_id}/images`, formData, {
+          method: 'POST',
+          headers: authHeaders()
+        });
+      }
+
+      if ($('reviewImages')) $('reviewImages').value = '';
+      if ($('reviewComment')) $('reviewComment').value = '';
+      showToast('ok', files.length ? `Review submitted with ${files.length} image(s).` : 'Review submitted.');
+      state.page = 1;
+      await loadReviews();
+    } catch (err) {
+      if (err?.error?.code === 'POLICIES_NOT_ACCEPTED') {
+        showToast('err', 'Accept policies first, then submit your review.');
+      } else {
+        showToast('err', errMsg(err));
+      }
+    }
+  });
+}
 
 $('claimForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -497,6 +689,7 @@ document.addEventListener('click', (e) => {
 
 (async () => {
   applyTheme();
+  renderReviewFactors();
   initProfileTabs();
   if (!businessId) {
     $('bizHeaderMeta').textContent = 'Missing businessId in URL.';
