@@ -1,6 +1,14 @@
+import {
+  clearApiBasePreference,
+  escapeAttr,
+  escapeHtml,
+  resolveApiBase,
+  safeJsonText,
+  saveApiBasePreference
+} from './shared/client.js';
+
 const $ = (id) => document.getElementById(id);
-const PROD_API_BASE = 'https://grow-albania-directory-api.onrender.com/v1';
-const initialApiBase = localStorage.getItem('dir.apiBase') || PROD_API_BASE;
+const initialApiBase = resolveApiBase({ allowStored: true, allowParam: false });
 
 const state = {
   token: localStorage.getItem('dir.token') || '',
@@ -102,9 +110,9 @@ const renderCategories = () => {
   $('adminCategories').innerHTML = categories
     .map(
       ([id, label]) =>
-        `<button type="button" class="item ${state.category === id ? 'active' : ''}" data-category="${id}">
-          <div class="item-title">${label}</div>
-          <div class="item-sub">${folderHints[id] || ''}</div>
+        `<button type="button" class="item ${state.category === id ? 'active' : ''}" data-category="${escapeAttr(id)}">
+          <div class="item-title">${escapeHtml(label)}</div>
+          <div class="item-sub">${escapeHtml(folderHints[id] || '')}</div>
         </button>`
     )
     .join('');
@@ -156,9 +164,9 @@ const renderTasks = () => {
   $('adminTaskList').innerHTML = state.tasks
     .map(
       (t) =>
-        `<button type="button" class="item ${state.selected?.id === t.id ? 'active' : ''}" data-task-id="${t.id}">
-          <div class="item-title">${t.title}</div>
-          <div class="item-sub">${t.subtitle || ''}</div>
+        `<button type="button" class="item ${state.selected?.id === t.id ? 'active' : ''}" data-task-id="${escapeAttr(t.id)}">
+          <div class="item-title">${escapeHtml(t.title)}</div>
+          <div class="item-sub">${escapeHtml(t.subtitle || '')}</div>
         </button>`
     )
     .join('');
@@ -196,20 +204,20 @@ const renderBusinessEditor = () => {
         .map(
           (loc) =>
             `<article class="item">
-              <div class="item-title">${loc.location_name || `${loc.city} location`}</div>
+              <div class="item-title">${escapeHtml(loc.location_name || `${loc.city} location`)}</div>
               <div class="grid2">
-                <input data-loc-field="location_name" data-loc-id="${loc.id}" value="${loc.location_name || ''}" placeholder="Location name" />
-                <input data-loc-field="address_line" data-loc-id="${loc.id}" value="${loc.address_line || ''}" placeholder="Address line" />
-                <input data-loc-field="city" data-loc-id="${loc.id}" value="${loc.city || ''}" placeholder="City" />
-                <input data-loc-field="region" data-loc-id="${loc.id}" value="${loc.region || ''}" placeholder="Region" />
-                <input data-loc-field="country" data-loc-id="${loc.id}" value="${loc.country || ''}" placeholder="Country" />
-                <input data-loc-field="location_phone" data-loc-id="${loc.id}" value="${loc.location_phone || ''}" placeholder="Phone" />
-                <input data-loc-field="location_email" data-loc-id="${loc.id}" value="${loc.location_email || ''}" placeholder="Email" />
-                <textarea data-loc-field="location_hours" data-loc-id="${loc.id}" placeholder='Hours JSON'>${loc.location_hours ? JSON.stringify(loc.location_hours) : ''}</textarea>
+                <input data-loc-field="location_name" data-loc-id="${escapeAttr(loc.id)}" value="${escapeAttr(loc.location_name || '')}" placeholder="Location name" />
+                <input data-loc-field="address_line" data-loc-id="${escapeAttr(loc.id)}" value="${escapeAttr(loc.address_line || '')}" placeholder="Address line" />
+                <input data-loc-field="city" data-loc-id="${escapeAttr(loc.id)}" value="${escapeAttr(loc.city || '')}" placeholder="City" />
+                <input data-loc-field="region" data-loc-id="${escapeAttr(loc.id)}" value="${escapeAttr(loc.region || '')}" placeholder="Region" />
+                <input data-loc-field="country" data-loc-id="${escapeAttr(loc.id)}" value="${escapeAttr(loc.country || '')}" placeholder="Country" />
+                <input data-loc-field="location_phone" data-loc-id="${escapeAttr(loc.id)}" value="${escapeAttr(loc.location_phone || '')}" placeholder="Phone" />
+                <input data-loc-field="location_email" data-loc-id="${escapeAttr(loc.id)}" value="${escapeAttr(loc.location_email || '')}" placeholder="Email" />
+                <textarea data-loc-field="location_hours" data-loc-id="${escapeAttr(loc.id)}" placeholder='Hours JSON'>${safeJsonText(loc.location_hours)}</textarea>
               </div>
               <div class="actions">
-                <button type="button" data-save-location-id="${loc.id}">Save Location</button>
-                ${canSuper() ? `<button type="button" data-remove-location-id="${loc.id}">Remove Location</button>` : ''}
+                <button type="button" data-save-location-id="${escapeAttr(loc.id)}">Save Location</button>
+                ${canSuper() ? `<button type="button" data-remove-location-id="${escapeAttr(loc.id)}">Remove Location</button>` : ''}
               </div>
             </article>`
         )
@@ -223,7 +231,7 @@ const renderBusinessResults = (items) => {
     : items
         .map(
           (b) =>
-            `<button type="button" class="item" data-business-id="${b.id}"><div class="item-title">${b.name}</div><div class="item-sub">Reviews: ${b.scores?.business_rating_count ?? 0}</div></button>`
+            `<button type="button" class="item" data-business-id="${escapeAttr(b.id)}"><div class="item-title">${escapeHtml(b.name)}</div><div class="item-sub">Reviews: ${Number(b.scores?.business_rating_count ?? 0)}</div></button>`
         )
         .join('');
 };
@@ -263,7 +271,7 @@ const loadUsers = async () => {
     : users.data
         .map(
           (u) =>
-            `<article class="item"><div class="item-title">${u.email || u.id}</div><div class="item-sub">role: ${u.role} · status: ${u.status}</div><div class="actions"><button type="button" data-user-email="${u.email || ''}" data-user-id="${u.id}" data-user-role="${u.role}">Use In Role Form</button>${u.status === 'active' ? `<button type="button" data-suspend-user-id="${u.id}">Suspend</button>` : ''}</div></article>`
+            `<article class="item"><div class="item-title">${escapeHtml(u.email || u.id)}</div><div class="item-sub">role: ${escapeHtml(u.role)} · status: ${escapeHtml(u.status)}</div><div class="actions"><button type="button" data-user-email="${escapeAttr(u.email || '')}" data-user-id="${escapeAttr(u.id)}" data-user-role="${escapeAttr(u.role)}">Use In Role Form</button>${u.status === 'active' ? `<button type="button" data-suspend-user-id="${escapeAttr(u.id)}">Suspend</button>` : ''}</div></article>`
         )
         .join('');
 };
@@ -281,7 +289,7 @@ const renderDetail = () => {
     return;
   }
 
-  $('adminDetail').innerHTML = `<div><strong>${t.title}</strong></div><pre class="out">${JSON.stringify(t.raw, null, 2)}</pre>`;
+  $('adminDetail').innerHTML = `<div><strong>${escapeHtml(t.title)}</strong></div><pre class="out">${safeJsonText(t.raw)}</pre>`;
   const actions = [];
 
   if (t.kind === 'appeal') {
@@ -657,8 +665,12 @@ $('adminApiBaseSave')?.addEventListener('click', () => {
     showToast('err', 'API base is required');
     return;
   }
-  state.apiBase = next;
-  localStorage.setItem('dir.apiBase', state.apiBase);
+  const saved = saveApiBasePreference(next);
+  if (!saved) {
+    showToast('err', 'Use an approved API base only.');
+    return;
+  }
+  state.apiBase = saved;
   showToast('ok', 'API base saved');
 });
 
@@ -667,8 +679,7 @@ $('adminApiBaseReset')?.addEventListener('click', () => {
     showToast('err', 'Owner access required');
     return;
   }
-  state.apiBase = PROD_API_BASE;
-  localStorage.setItem('dir.apiBase', state.apiBase);
+  state.apiBase = clearApiBasePreference();
   if ($('adminApiBase')) $('adminApiBase').value = state.apiBase;
   showToast('ok', 'Using default API base');
 });

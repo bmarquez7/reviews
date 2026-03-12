@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { requireAuth } from '../lib/auth.js';
+import { requireVerifiedUser } from '../lib/auth.js';
 import { ApiError } from '../lib/http-errors.js';
 import { supabaseAdmin } from '../lib/supabase.js';
 import {
@@ -46,7 +46,7 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
       }
     },
     async (request) => {
-      const user = await requireAuth(request);
+      const user = await requireVerifiedUser(request);
       const params = z.object({ commentId: z.string().uuid() }).parse(request.params);
 
       const comment = await supabaseAdmin
@@ -96,7 +96,7 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
       }
     },
     async (request) => {
-      const user = await requireAuth(request);
+      const user = await requireVerifiedUser(request);
       const params = z.object({ businessId: z.string().uuid() }).parse(request.params);
 
       const business = await supabaseAdmin

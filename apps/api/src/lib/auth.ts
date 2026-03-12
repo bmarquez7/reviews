@@ -4,6 +4,11 @@ import { supabaseAdmin } from './supabase.js';
 
 type AppRole = 'consumer' | 'business_owner' | 'moderator' | 'admin';
 
+const resolveConfirmedAt = (user: {
+  email_confirmed_at?: string | null;
+  confirmed_at?: string | null;
+}) => user.email_confirmed_at ?? user.confirmed_at ?? null;
+
 const parseBearer = (header?: string): string => {
   if (!header) {
     throw new ApiError(401, 'UNAUTHORIZED', 'Missing authorization header');
@@ -26,14 +31,23 @@ export const resolveAuthUser = async (request: FastifyRequest) => {
   }
 
   const userId = authData.user.id;
+  const authConfirmedAt = resolveConfirmedAt(authData.user);
   const { data: dbUser, error: dbUserError } = await supabaseAdmin
     .from('users')
-    .select('id,email,role,status')
+    .select('id,email,role,status,email_verified_at')
     .eq('id', userId)
     .single();
 
   if (dbUserError || !dbUser) {
     throw new ApiError(401, 'UNAUTHORIZED', 'User profile not found');
+  }
+
+  const emailVerifiedAt = dbUser.email_verified_at ?? authConfirmedAt;
+  if (!dbUser.email_verified_at && authConfirmedAt) {
+    await supabaseAdmin
+      .from('users')
+      .update({ email_verified_at: authConfirmedAt })
+      .eq('id', userId);
   }
 
   const { data: acceptance } = await supabaseAdmin
@@ -49,6 +63,7 @@ export const resolveAuthUser = async (request: FastifyRequest) => {
     email: dbUser.email ?? undefined,
     role: dbUser.role as AppRole,
     isSuspended: dbUser.status === 'suspended',
+    emailVerifiedAt,
     policiesAcceptedVersion: acceptance?.policies_version ?? null
   };
 
@@ -74,6 +89,22 @@ export const requireRole = async (request: FastifyRequest, allowedRoles: AppRole
   return user;
 };
 
+export const requireVerifiedUser = async (request: FastifyRequest) => {
+  const user = await requireAuth(request);
+  if (!user.emailVerifiedAt && !['moderator', 'admin'].includes(user.role)) {
+    throw new ApiError(403, 'EMAIL_NOT_VERIFIED', 'Verify your email before posting or managing content');
+  }
+  return user;
+};
+
+export const requireVerifiedRole = async (request: FastifyRequest, allowedRoles: AppRole[]) => {
+  const user = await requireRole(request, allowedRoles);
+  if (!user.emailVerifiedAt && !['moderator', 'admin'].includes(user.role)) {
+    throw new ApiError(403, 'EMAIL_NOT_VERIFIED', 'Verify your email before posting or managing content');
+  }
+  return user;
+};
+
 export const getCurrentPoliciesVersion = async (): Promise<string> => {
   const { data } = await supabaseAdmin
     .from('platform_config')
@@ -85,7 +116,7 @@ export const getCurrentPoliciesVersion = async (): Promise<string> => {
 };
 
 export const requirePoliciesAccepted = async (request: FastifyRequest) => {
-  const user = await requireAuth(request);
+  const user = await requireVerifiedUser(request);
   const currentVersion = await getCurrentPoliciesVersion();
 
   if (user.policiesAcceptedVersion !== currentVersion) {

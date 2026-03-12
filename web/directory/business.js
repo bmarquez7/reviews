@@ -1,3 +1,11 @@
+import {
+  escapeAttr,
+  escapeHtml,
+  resolveApiBase,
+  safeJsonText,
+  safeUrl
+} from './shared/client.js';
+
 const $ = (id) => document.getElementById(id);
 
 const FACTORS = [
@@ -21,11 +29,10 @@ const HOURS_DAYS = [
 ];
 
 const THEME_DEFAULTS = { brand: '#0f6a4d', bg: '#f5f2eb', card: '#fffdf7', iconUrl: './assets/new-roots-logo.png' };
-const PROD_API_BASE = 'https://grow-albania-directory-api.onrender.com/v1';
 
 const params = new URLSearchParams(window.location.search);
 const businessId = params.get('businessId');
-const apiBase = params.get('apiBase') || localStorage.getItem('dir.apiBase') || PROD_API_BASE;
+const apiBase = resolveApiBase({ allowStored: true, allowParam: false });
 const state = {
   token: localStorage.getItem('dir.token') || '',
   page: 1,
@@ -35,6 +42,8 @@ const state = {
   reviewFactors: Object.fromEntries(FACTORS.map(([key]) => [key, 5])),
   business: null,
   hoursLocationId: null,
+  canEditBusiness: false,
+  canEditHours: false,
   galleryUrls: [],
   galleryIndex: 0,
   galleryTimer: null
@@ -42,6 +51,12 @@ const state = {
 
 const authHeaders = () => (state.token ? { Authorization: `Bearer ${state.token}` } : {});
 const errMsg = (err) => err?.error?.message || 'Request failed';
+
+const sanitizeImageUrl = (value) => safeUrl(value, { allowHttp: true, allowHttps: true });
+const formatScoreText = (value) => {
+  if (value == null || Number.isNaN(Number(value))) return 'n/a';
+  return Number(value).toFixed(1);
+};
 
 const wordCount = (value) => (String(value || '').trim().match(/\S+/g) || []).length;
 
@@ -124,7 +139,9 @@ const applyTheme = () => {
 };
 
 const openImageLightbox = (url) => {
-  $('imageLightboxImg').src = url;
+  const safe = sanitizeImageUrl(url);
+  if (!safe) return;
+  $('imageLightboxImg').src = safe;
   $('imageLightbox').classList.remove('hidden');
 };
 
@@ -138,21 +155,36 @@ const syncAdminLink = async () => {
   const link = $('bizAdminLink');
   if (!link) return;
   const panel = $('manageBusinessPanel');
+  const hoursForm = $('hoursForm');
+  const hoursNote = $('hoursEditNote');
   if (!state.token) {
     link.classList.add('hidden');
     panel?.classList.add('hidden');
+    hoursForm?.classList.add('hidden');
+    if (hoursNote) hoursNote.textContent = 'Claimed owners and admins can edit hours.';
+    state.canEditBusiness = false;
+    state.canEditHours = false;
     return;
   }
   try {
     const me = await req('/users/me', { headers: authHeaders() });
-    const canAccess = me?.data?.role === 'admin' || me?.data?.role === 'moderator';
-    const canManage = me?.data?.role === 'admin' || me?.data?.role === 'business_owner';
+    const role = me?.data?.role;
+    const canAccess = role === 'admin' || role === 'moderator';
+    const canManage = role === 'admin' || role === 'business_owner';
+    state.canEditBusiness = canManage;
+    state.canEditHours = canManage;
     link.classList.toggle('hidden', !canAccess);
     panel?.classList.toggle('hidden', !canManage);
+    hoursForm?.classList.toggle('hidden', !canManage);
+    if (hoursNote) hoursNote.textContent = canManage ? 'Claimed owners and admins can edit hours.' : 'Login as a claimed owner or admin to edit hours.';
     if (canAccess) link.href = `./admin.html?businessId=${businessId}`;
   } catch {
     link.classList.add('hidden');
     panel?.classList.add('hidden');
+    hoursForm?.classList.add('hidden');
+    if (hoursNote) hoursNote.textContent = 'Claimed owners and admins can edit hours.';
+    state.canEditBusiness = false;
+    state.canEditHours = false;
   }
 };
 
@@ -246,7 +278,10 @@ const renderReviewLocationOptions = (business) => {
   state.reviewLocationId = current || null;
   select.innerHTML = ['<option value="">Select location to review</option>']
     .concat(
-      locations.map((loc, index) => `<option value="${loc.id}">${compactLocationLabel(business?.name || '', loc, index)} · ${loc.city || ''}</option>`)
+      locations.map(
+        (loc, index) =>
+          `<option value="${escapeAttr(loc.id)}">${escapeHtml(compactLocationLabel(business?.name || '', loc, index))} · ${escapeHtml(loc.city || '')}</option>`
+      )
     )
     .join('');
   select.value = current || '';
@@ -349,7 +384,7 @@ const renderBusinessGallery = (urls = []) => {
   gallery.innerHTML = state.galleryUrls
     .map(
       (url, idx) =>
-        `<button type="button" class="media-link" data-gallery-index="${idx}" data-image-url="${url}"><img class="media-thumb" src="${url}" alt="Business photo ${idx + 1}" loading="lazy" /></button>`
+        `<button type="button" class="media-link" data-gallery-index="${idx}" data-image-url="${escapeAttr(url)}"><img class="media-thumb" src="${escapeAttr(url)}" alt="Business photo ${idx + 1}" loading="lazy" /></button>`
     )
     .join('');
   setFeaturedImageByIndex(0);
@@ -368,10 +403,13 @@ const renderHoursSummary = (business) => {
   root.innerHTML = locations
     .map((loc, index) => {
       const map = normalizeLocationHours(loc.location_hours);
-      const lines = HOURS_DAYS.map(([day]) => `<div class="item-sub"><strong>${day[0].toUpperCase() + day.slice(1)}:</strong> ${formatHoursLine(map, day)}</div>`).join('');
+      const lines = HOURS_DAYS.map(
+        ([day]) =>
+          `<div class="item-sub"><strong>${day[0].toUpperCase() + day.slice(1)}:</strong> ${escapeHtml(formatHoursLine(map, day))}</div>`
+      ).join('');
       return `
         <article class="item">
-          <div class="item-title">${compactLocationLabel(business.name, loc, index)}</div>
+          <div class="item-title">${escapeHtml(compactLocationLabel(business.name, loc, index))}</div>
           ${lines}
         </article>
       `;
@@ -388,7 +426,12 @@ const renderHoursLocationOptions = (business) => {
     : (locations[0]?.id || '');
   state.hoursLocationId = selected || null;
   select.innerHTML = ['<option value="">Select location</option>']
-    .concat(locations.map((loc, index) => `<option value="${loc.id}">${compactLocationLabel(business?.name || '', loc, index)} · ${loc.city || ''}</option>`))
+    .concat(
+      locations.map(
+        (loc, index) =>
+          `<option value="${escapeAttr(loc.id)}">${escapeHtml(compactLocationLabel(business?.name || '', loc, index))} · ${escapeHtml(loc.city || '')}</option>`
+      )
+    )
     .join('');
   select.value = selected || '';
 };
@@ -416,27 +459,34 @@ const renderBusiness = (b) => {
   state.business = b;
   $('bizPageTitle').textContent = b.name || 'Business';
   $('bizHeaderMeta').innerHTML = `
-    <div class="row gap-sm center">${logoRatingMarkup(b.scores?.weighted_overall_display)}<strong>${b.scores?.weighted_overall_display ?? 'n/a'} / 5</strong> <span class="muted">(${b.scores?.business_rating_count ?? 0} reviews)</span></div>
-    <div class="muted">${b.is_claimed ? 'Claimed' : 'Unclaimed'} • ${b.categories?.map((c) => c.categories?.slug || c.slug || '').filter(Boolean).join(', ') || 'General'}</div>
+    <div class="row gap-sm center">${logoRatingMarkup(b.scores?.weighted_overall_display)}<strong>${formatScoreText(b.scores?.weighted_overall_display)} / 5</strong> <span class="muted">(${Number(b.scores?.business_rating_count ?? 0)} reviews)</span></div>
+    <div class="muted">${b.is_claimed ? 'Claimed' : 'Unclaimed'} • ${escapeHtml(b.categories?.map((c) => c.categories?.slug || c.slug || '').filter(Boolean).join(', ') || 'General')}</div>
   `;
 
-  renderBusinessGallery(b.media_urls || []);
+  renderBusinessGallery((b.media_urls || []).map((url) => sanitizeImageUrl(url)).filter(Boolean));
 
   const primaryLoc = b.locations?.[0];
   const links = [];
-  if (b.website_url) links.push(`<a class="chip link-chip" href="${b.website_url}" target="_blank" rel="noopener">Website</a>`);
-  if (b.social_facebook) links.push(`<a class="chip link-chip" href="${b.social_facebook}" target="_blank" rel="noopener">Facebook</a>`);
-  if (b.social_instagram) links.push(`<a class="chip link-chip" href="${b.social_instagram}" target="_blank" rel="noopener">Instagram</a>`);
-  if (b.social_tiktok) links.push(`<a class="chip link-chip" href="${b.social_tiktok}" target="_blank" rel="noopener">TikTok</a>`);
-  if (b.primary_phone) links.push(`<a class="chip link-chip" href="tel:${b.primary_phone}">${b.primary_phone}</a>`);
-  if (b.primary_email) links.push(`<a class="chip link-chip" href="mailto:${b.primary_email}">${b.primary_email}</a>`);
-  if (primaryLoc) links.push(`<a class="chip link-chip" href="${mapUrlFor(primaryLoc)}" target="_blank" rel="noopener">Open in Google Maps</a>`);
+  const websiteUrl = safeUrl(b.website_url, { allowHttp: true, allowHttps: true });
+  const facebookUrl = safeUrl(b.social_facebook, { allowHttp: true, allowHttps: true });
+  const instagramUrl = safeUrl(b.social_instagram, { allowHttp: true, allowHttps: true });
+  const tiktokUrl = safeUrl(b.social_tiktok, { allowHttp: true, allowHttps: true });
+  const phoneUrl = safeUrl(b.primary_phone ? `tel:${b.primary_phone}` : '', { allowTel: true });
+  const emailUrl = safeUrl(b.primary_email ? `mailto:${b.primary_email}` : '', { allowMailto: true });
+  const mapsUrl = primaryLoc ? mapUrlFor(primaryLoc) : null;
+  if (websiteUrl) links.push(`<a class="chip link-chip" href="${escapeAttr(websiteUrl)}" target="_blank" rel="noopener">Website</a>`);
+  if (facebookUrl) links.push(`<a class="chip link-chip" href="${escapeAttr(facebookUrl)}" target="_blank" rel="noopener">Facebook</a>`);
+  if (instagramUrl) links.push(`<a class="chip link-chip" href="${escapeAttr(instagramUrl)}" target="_blank" rel="noopener">Instagram</a>`);
+  if (tiktokUrl) links.push(`<a class="chip link-chip" href="${escapeAttr(tiktokUrl)}" target="_blank" rel="noopener">TikTok</a>`);
+  if (phoneUrl) links.push(`<a class="chip link-chip" href="${escapeAttr(phoneUrl)}">${escapeHtml(b.primary_phone)}</a>`);
+  if (emailUrl) links.push(`<a class="chip link-chip" href="${escapeAttr(emailUrl)}">${escapeHtml(b.primary_email)}</a>`);
+  if (mapsUrl) links.push(`<a class="chip link-chip" href="${escapeAttr(mapsUrl)}" target="_blank" rel="noopener">Open in Google Maps</a>`);
   $('bizLinks').innerHTML = links.join('');
 
   $('bizInfo').innerHTML = `
-    <div><strong>${b.name}</strong></div>
-    <div class="muted">${b.description || 'No description available yet.'}</div>
-    <div class="muted">${b.mission_statement || ''}</div>
+    <div><strong>${escapeHtml(b.name)}</strong></div>
+    <div class="muted">${escapeHtml(b.description || 'No description available yet.')}</div>
+    <div class="muted">${escapeHtml(b.mission_statement || '')}</div>
   `;
 
   const formValues = {
@@ -457,7 +507,7 @@ const renderBusiness = (b) => {
     ? b.locations
         .map(
           (loc, index) =>
-            `<article class="item"><div class="item-title">${compactLocationLabel(b.name, loc, index)}</div><div class="item-sub">${loc.address_line}, ${loc.city}, ${loc.country}</div><div class="row gap-sm"><a class="chip link-chip" target="_blank" rel="noopener" href="${mapUrlFor(loc)}">Map</a>${loc.location_phone ? `<a class="chip link-chip" href="tel:${loc.location_phone}">${loc.location_phone}</a>` : ''}${loc.location_email ? `<a class="chip link-chip" href="mailto:${loc.location_email}">Email</a>` : ''}</div></article>`
+            `<article class="item"><div class="item-title">${escapeHtml(compactLocationLabel(b.name, loc, index))}</div><div class="item-sub">${escapeHtml(`${loc.address_line}, ${loc.city}, ${loc.country}`)}</div><div class="row gap-sm"><a class="chip link-chip" target="_blank" rel="noopener" href="${escapeAttr(mapUrlFor(loc))}">Map</a>${safeUrl(loc.location_phone ? `tel:${loc.location_phone}` : '', { allowTel: true }) ? `<a class="chip link-chip" href="${escapeAttr(safeUrl(`tel:${loc.location_phone}`, { allowTel: true }))}">${escapeHtml(loc.location_phone)}</a>` : ''}${safeUrl(loc.location_email ? `mailto:${loc.location_email}` : '', { allowMailto: true }) ? `<a class="chip link-chip" href="${escapeAttr(safeUrl(`mailto:${loc.location_email}`, { allowMailto: true }))}">Email</a>` : ''}</div></article>`
         )
         .join('')
     : '<div class="muted">No locations available.</div>';
@@ -511,20 +561,23 @@ const renderReviews = (items) => {
       const rv = r.reviewer || {};
       const rating = r.rating || {};
       const factors = rating.factors || {};
+      const profileImage = sanitizeImageUrl(rv.profile_image_url);
       const media = (r.media_urls || [])
-        .map((url) => `<button type="button" class="media-link" data-image-url="${url}"><img class="media-thumb" src="${url}" alt="Review image" /></button>`)
+        .map((url) => sanitizeImageUrl(url))
+        .filter(Boolean)
+        .map((url) => `<button type="button" class="media-link" data-image-url="${escapeAttr(url)}"><img class="media-thumb" src="${escapeAttr(url)}" alt="Review image" /></button>`)
         .join('');
       return `
       <article class="review-card">
         <div class="review-head">
           <div class="review-user">
-            ${rv.profile_image_url ? `<img class="avatar" src="${rv.profile_image_url}" alt="${rv.screen_name || 'Reviewer'}" />` : `<span class="avatar">${(rv.screen_name || 'US').slice(0,2).toUpperCase()}</span>`}
+            ${profileImage ? `<img class="avatar" src="${escapeAttr(profileImage)}" alt="${escapeAttr(rv.screen_name || 'Reviewer')}" />` : `<span class="avatar">${escapeHtml((rv.screen_name || 'US').slice(0,2).toUpperCase())}</span>`}
             <div>
-              <div><strong>${rv.screen_name || 'User'}</strong></div>
-              <div class="review-meta">${rv.country_of_origin || ''} ${rv.age_range_public ? `• ${rv.age_range_public}` : ''}</div>
+              <div><strong>${escapeHtml(rv.screen_name || 'User')}</strong></div>
+              <div class="review-meta">${escapeHtml(`${rv.country_of_origin || ''}${rv.age_range_public ? ` • ${rv.age_range_public}` : ''}`.trim())}</div>
             </div>
           </div>
-          <div class="row gap-sm center">${logoRatingMarkup(rating.overall_score_display)}<strong>${rating.overall_score_display ?? 'n/a'}</strong></div>
+          <div class="row gap-sm center">${logoRatingMarkup(rating.overall_score_display)}<strong>${formatScoreText(rating.overall_score_display)}</strong></div>
         </div>
         <div class="chips">
           <span class="chip">Pricing ${Number(factors.pricing_transparency || 0).toFixed(1)}</span>
@@ -535,7 +588,7 @@ const renderReviews = (items) => {
           <span class="chip">Access ${Number(factors.accessibility_friendliness || 0).toFixed(1)}</span>
           <span class="chip">Clean ${Number(factors.cleanliness || 0).toFixed(1)}</span>
         </div>
-        <div class="review-text">${r.content || ''}</div>
+        <div class="review-text">${escapeHtml(r.content || '')}</div>
         <div class="media-grid">${media}</div>
       </article>`;
     })

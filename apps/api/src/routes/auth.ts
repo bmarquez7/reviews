@@ -58,6 +58,9 @@ const loginBodyJsonSchema = {
 } as const;
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
+  const resolveConfirmedAt = (user: { email_confirmed_at?: string | null; confirmed_at?: string | null }) =>
+    user.email_confirmed_at ?? user.confirmed_at ?? null;
+
   app.post(
     '/auth/signup',
     {
@@ -196,11 +199,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     let { data: dbUser } = await supabaseAdmin
       .from('users')
-      .select('id,role,language_preference')
+      .select('id,role,language_preference,email_verified_at')
       .eq('id', login.data.user.id)
       .single();
 
     if (!dbUser) {
+      const emailVerifiedAt = resolveConfirmedAt(login.data.user);
       const bootstrapUser = await supabaseAdmin
         .from('users')
         .upsert(
@@ -210,11 +214,11 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
             role: 'consumer',
             status: 'active',
             language_preference: 'en',
-            email_verified_at: new Date().toISOString()
+            email_verified_at: emailVerifiedAt
           },
           { onConflict: 'id' }
         )
-        .select('id,role,language_preference')
+        .select('id,role,language_preference,email_verified_at')
         .single();
 
       if (bootstrapUser.error || !bootstrapUser.data) {
@@ -222,6 +226,16 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       }
 
       dbUser = bootstrapUser.data;
+    }
+
+    if (!dbUser?.email_verified_at) {
+      const emailVerifiedAt = resolveConfirmedAt(login.data.user);
+      if (emailVerifiedAt) {
+        await supabaseAdmin
+          .from('users')
+          .update({ email_verified_at: emailVerifiedAt })
+          .eq('id', login.data.user.id);
+      }
     }
 
     return {

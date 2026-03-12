@@ -5,6 +5,7 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { env } from './lib/env.js';
 import { toErrorResponse } from './lib/http-errors.js';
+import { registerRateLimit } from './lib/rate-limit.js';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { i18nRoutes } from './routes/i18n.js';
@@ -17,6 +18,7 @@ import { mediaRoutes } from './routes/media.js';
 
 export const buildApp = () => {
   const app = Fastify({ logger: true });
+  registerRateLimit(app);
 
   const allowedOrigins = env.APP_ORIGIN.split(',')
     .map((value) => value.trim())

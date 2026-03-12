@@ -9,6 +9,7 @@ declare module 'fastify' {
       email?: string;
       role: AppRole;
       isSuspended: boolean;
+      emailVerifiedAt: string | null;
       policiesAcceptedVersion: string | null;
     };
   }

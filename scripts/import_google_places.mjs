@@ -1,9 +1,11 @@
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import process from "process";
 import dotenv from "dotenv";
 
 const ROOT = path.resolve(process.cwd(), "..");
+const GOOGLE_FALLBACK_MANIFEST = path.resolve(ROOT, "data/google_place_fallbacks.json");
 const DEFAULT_ENV_PATHS = [
   path.resolve(process.cwd(), ".env"),
   path.resolve(ROOT, "apps/api/.env"),
@@ -17,16 +19,20 @@ for (const envPath of DEFAULT_ENV_PATHS) {
   }
 }
 
-const DIRECTORY_API_BASE = (process.env.DIRECTORY_API_BASE || process.env.DIRECTORY_API_URL || "https://grow-albania-directory-api.onrender.com/v1").replace(/\/$/, "");
+const SUPABASE_URL = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || process.env.GOOGLE_PLACES_API_KEY || "";
 const GOOGLE_IMPORT_APPROVED = String(process.env.GOOGLE_IMPORT_APPROVED || "false").toLowerCase() === "true";
 const DRY_RUN = process.argv.includes("--dry-run") || String(process.env.GOOGLE_IMPORT_DRY_RUN || "0") === "1";
 
 const BUSINESS_TARGET = Number(process.env.GOOGLE_IMPORT_BUSINESS_TARGET || process.env.GOOGLE_IMPORT_TARGET || "2000");
-const MAX_QUERIES = Number(process.env.GOOGLE_IMPORT_MAX_QUERIES || "320");
+const MAX_QUERIES = Number(process.env.GOOGLE_IMPORT_MAX_QUERIES || "150");
+const QUERY_OFFSET = Number(process.env.GOOGLE_IMPORT_QUERY_OFFSET || "0");
 const MAX_PAGES = Number(process.env.GOOGLE_IMPORT_MAX_PAGES || "3");
 const PAGE_SIZE = 20;
-const API_DELAY_MS = Number(process.env.DIRECTORY_IMPORT_API_DELAY_MS || "40");
+const WRITE_DELAY_MS = Number(process.env.GOOGLE_IMPORT_WRITE_DELAY_MS || "15");
+const GOOGLE_DELAY_MS = Number(process.env.GOOGLE_IMPORT_GOOGLE_DELAY_MS || "120");
+const NEXT_PAGE_DELAY_MS = Number(process.env.GOOGLE_IMPORT_NEXT_PAGE_DELAY_MS || "1200");
 
 const DEFAULT_CITIES = [
   "Tirana",
@@ -98,8 +104,19 @@ const GOOGLE_FIELD_MASK = [
   "places.types",
   "places.rating",
   "places.userRatingCount",
+  "places.websiteUri",
+  "places.internationalPhoneNumber",
+  "places.regularOpeningHours.weekdayDescriptions",
   "nextPageToken"
 ].join(",");
+
+const CATEGORY_SEED = [
+  { slug: "cafe", label_i18n_key: "categories.cafe" },
+  { slug: "restaurant", label_i18n_key: "categories.restaurant" },
+  { slug: "hotel", label_i18n_key: "categories.hotel" },
+  { slug: "clinic", label_i18n_key: "categories.clinic" },
+  { slug: "retail", label_i18n_key: "categories.retail" }
+];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -163,7 +180,10 @@ const parseCacheFile = (raw) => {
         longitude: Number(row.longitude ?? row.location?.longitude ?? 0) || null,
         rating: Number(row.rating || 0),
         userRatingCount: Number(row.userRatingCount || row.user_ratings_total || 0),
-        categorySlug: mapCategorySlug(row.types || [], row.primaryType || row.primary_type || "")
+        categorySlug: mapCategorySlug(row.types || [], row.primaryType || row.primary_type || ""),
+        websiteUri: row.websiteUri || row.website_url || null,
+        internationalPhoneNumber: row.internationalPhoneNumber || row.phone || row.primary_phone || null,
+        weekdayDescriptions: row.regularOpeningHours?.weekdayDescriptions || row.weekdayDescriptions || row.weekday_text || []
       };
     })
     .filter(Boolean);
@@ -201,9 +221,7 @@ const buildQueries = () => {
   const queries = [];
   for (const city of IMPORT_CITIES) {
     for (const category of CATEGORY_QUERIES) {
-      for (const mod of QUERY_MODIFIERS) {
-        queries.push(`${mod} ${category} in ${city} Albania`);
-      }
+      for (const mod of QUERY_MODIFIERS) queries.push(`${mod} ${category} in ${city} Albania`);
       queries.push(`${category} near city center ${city} Albania`);
     }
   }
@@ -222,10 +240,8 @@ const buildQueries = () => {
     if (seen.has(key)) continue;
     seen.add(key);
     unique.push(q);
-    if (unique.length >= MAX_QUERIES) break;
   }
-
-  return unique;
+  return unique.slice(QUERY_OFFSET, QUERY_OFFSET + MAX_QUERIES);
 };
 
 const googleSearch = async (textQuery, pageToken = "") => {
@@ -235,7 +251,6 @@ const googleSearch = async (textQuery, pageToken = "") => {
     regionCode: "AL",
     pageSize: PAGE_SIZE
   };
-
   if (pageToken) body.pageToken = pageToken;
 
   const response = await fetch(GOOGLE_ENDPOINT, {
@@ -249,27 +264,18 @@ const googleSearch = async (textQuery, pageToken = "") => {
   });
 
   const json = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(`Google API failed (${response.status}): ${JSON.stringify(json)}`);
-  }
-
+  if (!response.ok) throw new Error(`Google API failed (${response.status}): ${JSON.stringify(json)}`);
   return json;
 };
 
 const estimateCosts = (queryCount) => {
   const maxGoogleCalls = queryCount * MAX_PAGES;
-
-  // Google Places Text Search (New) pricing varies by SKU/fields.
-  // We keep a conservative range and require explicit approval before paid runs.
   const lowPer1k = 5;
   const highPer1k = 32;
-  const low = (maxGoogleCalls / 1000) * lowPer1k;
-  const high = (maxGoogleCalls / 1000) * highPer1k;
-
   return {
     maxGoogleCalls,
-    estimatedUsdLow: Number(low.toFixed(2)),
-    estimatedUsdHigh: Number(high.toFixed(2))
+    estimatedUsdLow: Number(((maxGoogleCalls / 1000) * lowPer1k).toFixed(2)),
+    estimatedUsdHigh: Number(((maxGoogleCalls / 1000) * highPer1k).toFixed(2))
   };
 };
 
@@ -279,12 +285,10 @@ const addCandidate = (byId, row) => {
     byId.set(row.placeId, row);
     return;
   }
-
   if (row.userRatingCount > existing.userRatingCount) {
     byId.set(row.placeId, row);
     return;
   }
-
   if (row.userRatingCount === existing.userRatingCount && row.rating > existing.rating) {
     byId.set(row.placeId, row);
   }
@@ -295,11 +299,7 @@ const collectPlaces = async (queries, cached) => {
   for (const row of cached) addCandidate(byId, row);
 
   if (!GOOGLE_API_KEY) {
-    return {
-      rows: Array.from(byId.values()),
-      googleCalls: 0,
-      queriesExecuted: 0
-    };
+    return { rows: Array.from(byId.values()), googleCalls: 0, queriesExecuted: 0 };
   }
 
   let googleCalls = 0;
@@ -321,9 +321,9 @@ const collectPlaces = async (queries, cached) => {
           name: normalizeSpaces(place.displayName.text),
           addressLine: normalizeSpaces(place.formattedAddress || "Address not listed"),
           city: (() => {
-            const fromAddress = String(place.formattedAddress || "");
+            const fromAddress = String(place.formattedAddress || "").toLowerCase();
             for (const cityName of IMPORT_CITIES) {
-              if (fromAddress.toLowerCase().includes(cityName.toLowerCase())) return cityName;
+              if (fromAddress.includes(cityName.toLowerCase())) return cityName;
             }
             return IMPORT_CITIES[0] || "Tirana";
           })(),
@@ -333,23 +333,22 @@ const collectPlaces = async (queries, cached) => {
           longitude: place.location?.longitude ?? null,
           rating: Number(place.rating || 0),
           userRatingCount: Number(place.userRatingCount || 0),
-          categorySlug: mapCategorySlug(place.types || [], place.primaryType || "")
+          categorySlug: mapCategorySlug(place.types || [], place.primaryType || ""),
+          websiteUri: place.websiteUri || null,
+          internationalPhoneNumber: place.internationalPhoneNumber || null,
+          weekdayDescriptions: place.regularOpeningHours?.weekdayDescriptions || []
         });
       }
 
       pageToken = data.nextPageToken || "";
       if (!pageToken) break;
-      await sleep(1200);
+      await sleep(NEXT_PAGE_DELAY_MS);
     }
 
-    await sleep(160);
+    await sleep(GOOGLE_DELAY_MS);
   }
 
-  return {
-    rows: Array.from(byId.values()),
-    googleCalls,
-    queriesExecuted
-  };
+  return { rows: Array.from(byId.values()), googleCalls, queriesExecuted };
 };
 
 const groupBusinesses = (places) => {
@@ -366,6 +365,8 @@ const groupBusinesses = (places) => {
         topRatingCount: row.userRatingCount,
         topRating: row.rating,
         categorySlug: row.categorySlug,
+        websiteUri: row.websiteUri || null,
+        primaryPhone: row.internationalPhoneNumber || null,
         locations: []
       });
     }
@@ -376,6 +377,8 @@ const groupBusinesses = (places) => {
       group.topRatingCount = row.userRatingCount;
       group.topRating = row.rating;
       group.categorySlug = row.categorySlug;
+      group.websiteUri = row.websiteUri || group.websiteUri || null;
+      group.primaryPhone = row.internationalPhoneNumber || group.primaryPhone || null;
     }
 
     const locationKey = canonicalAddress(row.addressLine, row.city, row.country);
@@ -390,7 +393,9 @@ const groupBusinesses = (places) => {
         latitude: row.latitude,
         longitude: row.longitude,
         rating: row.rating,
-        userRatingCount: row.userRatingCount
+        userRatingCount: row.userRatingCount,
+        locationPhone: row.internationalPhoneNumber || null,
+        weekdayDescriptions: Array.isArray(row.weekdayDescriptions) ? row.weekdayDescriptions : []
       });
     }
   }
@@ -411,105 +416,260 @@ const groupBusinesses = (places) => {
   });
 };
 
-const apiRequest = async (pathName, { method = "GET", token, body } = {}) => {
-  const response = await fetch(`${DIRECTORY_API_BASE}${pathName}`, {
+const supabaseRequest = async (route, { method = "GET", body, headers = {} } = {}) => {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1${route}`, {
     method,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      ...headers
     },
     body: body ? JSON.stringify(body) : undefined
   });
 
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : {};
+  let payload = null;
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = text;
+    }
+  }
+
   if (!response.ok) {
-    const msg = payload?.error?.message || text || `HTTP ${response.status}`;
-    throw new Error(`${method} ${pathName} failed: ${msg}`);
+    throw new Error(`Supabase ${method} ${route} failed (${response.status}): ${typeof payload === "string" ? payload : JSON.stringify(payload)}`);
   }
 
-  return payload;
+  return { data: payload, headers: response.headers };
 };
 
-const loginOrSignup = async () => {
-  const email = process.env.DIRECTORY_IMPORT_EMAIL || process.env.IMPORT_EMAIL || "";
-  const password = process.env.DIRECTORY_IMPORT_PASSWORD || process.env.IMPORT_PASSWORD || "";
+const ensureCategories = async () => {
+  const existing = await supabaseRequest("/categories?select=id,slug&limit=5000");
+  const bySlug = new Map((existing.data || []).map((r) => [r.slug, r.id]));
 
-  if (!email || !password) {
-    throw new Error("Missing DIRECTORY_IMPORT_EMAIL and DIRECTORY_IMPORT_PASSWORD for API import");
+  const missing = CATEGORY_SEED.filter((c) => !bySlug.has(c.slug));
+  if (missing.length) {
+    const inserted = await supabaseRequest("/categories?on_conflict=slug", {
+      method: "POST",
+      body: missing,
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" }
+    });
+
+    for (const row of inserted.data || []) bySlug.set(row.slug, row.id);
   }
 
-  try {
-    const login = await apiRequest("/auth/login", {
-      method: "POST",
-      body: { email, password }
-    });
-
-    return login.data;
-  } catch (err) {
-    if (String(process.env.DIRECTORY_IMPORT_AUTO_SIGNUP || "0") !== "1") {
-      throw err;
-    }
-
-    await apiRequest("/auth/signup", {
-      method: "POST",
-      body: {
-        email,
-        password,
-        first_name: process.env.DIRECTORY_IMPORT_FIRST_NAME || "Import",
-        last_name: process.env.DIRECTORY_IMPORT_LAST_NAME || "Operator",
-        country_of_origin: "Albania",
-        age: Number(process.env.DIRECTORY_IMPORT_AGE || "30"),
-        screen_name: process.env.DIRECTORY_IMPORT_SCREEN_NAME || "Directory Import"
-      }
-    });
-
-    const login = await apiRequest("/auth/login", {
-      method: "POST",
-      body: { email, password }
-    });
-
-    return login.data;
-  }
+  // Re-read to ensure IDs are complete.
+  const refreshed = await supabaseRequest("/categories?select=id,slug&limit=5000");
+  return new Map((refreshed.data || []).map((r) => [r.slug, r.id]));
 };
 
-const ensurePoliciesAccepted = async (loginData) => {
-  if (loginData?.user?.policies?.accepted) return;
+const ensureOwnerUser = async () => {
+  const existing = await supabaseRequest("/users?select=id,email,role,status&status=eq.active&role=in.(admin,business_owner)&limit=1");
+  if ((existing.data || []).length > 0) return existing.data[0].id;
 
-  const version = loginData?.user?.policies?.current_version;
-  if (!version) throw new Error("Missing current policy version in login response");
-
-  await apiRequest("/users/me/policies/accept", {
+  const id = crypto.randomUUID();
+  const email = `importer+${Date.now()}@grow-albania.local`;
+  await supabaseRequest("/users", {
     method: "POST",
-    token: loginData.access_token,
-    body: {
-      policies_version: version,
-      accepted_via: "business_onboarding",
-      checkboxes: {
-        firsthand_only: true,
-        professional_no_hate: true,
-        moderation_understood: true
-      }
-    }
+    body: [{
+      id,
+      email,
+      role: "business_owner",
+      status: "active",
+      language_preference: "en",
+      email_verified_at: new Date().toISOString()
+    }],
+    headers: { Prefer: "return=minimal" }
   });
+
+  return id;
 };
 
 const fetchAllBusinesses = async () => {
-  let page = 1;
-  const pageSize = 100;
-  const items = [];
+  const out = [];
+  const pageSize = 1000;
+  let offset = 0;
 
   while (true) {
-    const data = await apiRequest(`/businesses?page=${page}&page_size=${pageSize}&sort=name`);
-    const batch = data?.data?.items || [];
-    items.push(...batch);
-
-    const total = Number(data?.data?.total || 0);
-    if (items.length >= total || batch.length === 0) break;
-    page += 1;
+    const res = await supabaseRequest(`/businesses?select=id,name&status=eq.active&order=name.asc&limit=${pageSize}&offset=${offset}`);
+    const rows = res.data || [];
+    out.push(...rows);
+    if (rows.length < pageSize) break;
+    offset += pageSize;
   }
 
-  return items;
+  return out;
+};
+
+const fetchAllLocations = async () => {
+  const pageSize = 2000;
+  let offset = 0;
+  const map = new Map();
+
+  while (true) {
+    const res = await supabaseRequest(`/business_locations?select=business_id,address_line,city,country,status&limit=${pageSize}&offset=${offset}`);
+    const rows = res.data || [];
+    for (const row of rows) {
+      if (row.status !== "active") continue;
+      const key = canonicalAddress(row.address_line, row.city, row.country);
+      const set = map.get(row.business_id) || new Set();
+      set.add(key);
+      map.set(row.business_id, set);
+    }
+    if (rows.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  return map;
+};
+
+const createBusiness = async ({ ownerUserId, group, categoryId }) => {
+  const created = await supabaseRequest("/businesses", {
+    method: "POST",
+    body: [{
+      owner_user_id: ownerUserId,
+      name: group.displayName,
+      owner_name: "Imported Listing",
+      description: "Imported from Google Places.",
+      website_url: group.websiteUri || null,
+      primary_phone: group.primaryPhone || null,
+      status: "active",
+      is_claimed: false
+    }],
+    headers: { Prefer: "return=representation" }
+  });
+
+  const businessId = created?.data?.[0]?.id;
+  if (!businessId) throw new Error(`Business create returned no id for ${group.displayName}`);
+
+  if (categoryId) {
+    await supabaseRequest("/business_category_assignments?on_conflict=business_id,category_id", {
+      method: "POST",
+      body: [{ business_id: businessId, category_id: categoryId }],
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" }
+    });
+  }
+
+  return businessId;
+};
+
+const createLocation = async (businessId, group, loc, isMain) => {
+  await supabaseRequest("/business_locations", {
+    method: "POST",
+    body: [{
+      business_id: businessId,
+      location_name: isMain ? `${group.displayName} (Main)` : `${group.displayName} - ${loc.city || "Alternate"}`,
+      address_line: loc.addressLine,
+      city: loc.city || "Tirana",
+      region: loc.region || "Tirane",
+      country: loc.country || "Albania",
+      location_phone: loc.locationPhone || null,
+      location_hours: Array.isArray(loc.weekdayDescriptions) && loc.weekdayDescriptions.length
+        ? { weekday_text: loc.weekdayDescriptions }
+        : null,
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+      status: "active"
+    }],
+    headers: { Prefer: "return=minimal" }
+  });
+};
+
+const writeFallbackManifest = (grouped) => {
+  const payload = {
+    generated_at: new Date().toISOString(),
+    items: grouped.map((group) => ({
+      canonical_name: group.canonicalName,
+      display_name: group.displayName,
+      rating: Number(group.topRating || 0),
+      rating_count: Number(group.topRatingCount || 0)
+    }))
+  };
+
+  fs.mkdirSync(path.dirname(GOOGLE_FALLBACK_MANIFEST), { recursive: true });
+  fs.writeFileSync(GOOGLE_FALLBACK_MANIFEST, JSON.stringify(payload, null, 2));
+  console.log(`Wrote Google fallback manifest to ${GOOGLE_FALLBACK_MANIFEST}`);
+};
+
+const runSupabaseImport = async (grouped, collected) => {
+  const categoryBySlug = await ensureCategories();
+  const ownerUserId = await ensureOwnerUser();
+
+  const existingBusinesses = await fetchAllBusinesses();
+  const existingByCanonical = new Map();
+  for (const b of existingBusinesses) {
+    const key = canonicalBusinessName(b.name);
+    if (!key || existingByCanonical.has(key)) continue;
+    existingByCanonical.set(key, b.id);
+  }
+
+  const locationKeysByBusiness = await fetchAllLocations();
+  const existingTotal = existingBusinesses.length;
+  const toCreate = Math.max(0, BUSINESS_TARGET - existingTotal);
+
+  let createdBusinesses = 0;
+  let reusedBusinesses = 0;
+  let createdLocations = 0;
+
+  const groupedLimited = grouped.slice(0, Math.max(BUSINESS_TARGET * 2, 4500));
+
+  for (const group of groupedLimited) {
+    let businessId = existingByCanonical.get(group.canonicalName);
+
+    if (!businessId) {
+      if (createdBusinesses >= toCreate) continue;
+      const categoryId = categoryBySlug.get(group.categorySlug);
+      businessId = await createBusiness({ ownerUserId, group, categoryId });
+      existingByCanonical.set(group.canonicalName, businessId);
+      createdBusinesses += 1;
+      await sleep(WRITE_DELAY_MS);
+    } else {
+      reusedBusinesses += 1;
+    }
+
+    const existingLocSet = locationKeysByBusiness.get(businessId) || new Set();
+    const hadNoLocations = existingLocSet.size === 0;
+
+    for (let i = 0; i < group.locations.length; i += 1) {
+      const loc = group.locations[i];
+      if (existingLocSet.has(loc.locationKey)) continue;
+
+      const isMain = hadNoLocations && i === 0;
+      await createLocation(businessId, group, loc, isMain);
+      existingLocSet.add(loc.locationKey);
+      createdLocations += 1;
+      await sleep(WRITE_DELAY_MS);
+    }
+
+    locationKeysByBusiness.set(businessId, existingLocSet);
+
+    if (existingByCanonical.size >= BUSINESS_TARGET) break;
+  }
+
+  const finalTotal = (await fetchAllBusinesses()).length;
+
+  console.log(
+    JSON.stringify(
+      {
+        mode: "supabase_direct",
+        google_calls: collected.googleCalls,
+        queries_executed: collected.queriesExecuted,
+        unique_places_collected: collected.rows.length,
+        grouped_businesses_available: grouped.length,
+        existing_businesses_before: existingTotal,
+        businesses_created: createdBusinesses,
+        businesses_reused: reusedBusinesses,
+        locations_created: createdLocations,
+        businesses_total_after: finalTotal,
+        target: BUSINESS_TARGET,
+        target_reached: finalTotal >= BUSINESS_TARGET
+      },
+      null,
+      2
+    )
+  );
 };
 
 const main = async () => {
@@ -525,11 +685,9 @@ const main = async () => {
         query_count: queries.length,
         max_pages_per_query: MAX_PAGES,
         max_google_calls: cost.maxGoogleCalls,
-        estimated_google_cost_usd: {
-          low: cost.estimatedUsdLow,
-          high: cost.estimatedUsdHigh
-        },
+        estimated_google_cost_usd: { low: cost.estimatedUsdLow, high: cost.estimatedUsdHigh },
         cached_rows_found: cached.length,
+        supabase_direct: Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY),
         approval_required: !DRY_RUN && !GOOGLE_IMPORT_APPROVED
       },
       null,
@@ -538,139 +696,18 @@ const main = async () => {
   );
 
   if (DRY_RUN) return;
-  if (!GOOGLE_IMPORT_APPROVED) {
-    throw new Error("GOOGLE_IMPORT_APPROVED=true required before paid run");
-  }
 
-  if (!GOOGLE_API_KEY && cached.length === 0) {
-    throw new Error("No GOOGLE_API_KEY set and no cached dataset found");
-  }
+  if (!GOOGLE_IMPORT_APPROVED) throw new Error("GOOGLE_IMPORT_APPROVED=true required before paid run");
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  if (!GOOGLE_API_KEY && cached.length === 0) throw new Error("No GOOGLE_API_KEY set and no cached dataset found");
 
   const collected = await collectPlaces(queries, cached);
   const grouped = groupBusinesses(collected.rows);
 
-  if (grouped.length === 0) {
-    throw new Error("No businesses collected from cache or Google");
-  }
+  if (grouped.length === 0) throw new Error("No businesses collected from cache or Google");
 
-  const login = await loginOrSignup();
-  await ensurePoliciesAccepted(login);
-
-  const categories = await apiRequest("/categories");
-  const categoryBySlug = new Map((categories?.data || []).map((c) => [c.slug, c.id]));
-
-  const existingBusinesses = await fetchAllBusinesses();
-  const existingByCanonical = new Map();
-  for (const b of existingBusinesses) {
-    const key = canonicalBusinessName(b.name);
-    if (!key || existingByCanonical.has(key)) continue;
-    existingByCanonical.set(key, b.id);
-  }
-
-  const existingTotal = existingBusinesses.length;
-  const createNeeded = Math.max(0, BUSINESS_TARGET - existingTotal);
-
-  let createdBusinesses = 0;
-  let createdLocations = 0;
-  let reusedBusinesses = 0;
-
-  const locationKeysByBusiness = new Map();
-
-  const getLocationKeySet = async (businessId) => {
-    if (locationKeysByBusiness.has(businessId)) return locationKeysByBusiness.get(businessId);
-
-    const detail = await apiRequest(`/businesses/${businessId}`);
-    const set = new Set(
-      (detail?.data?.locations || []).map((loc) => canonicalAddress(loc.address_line, loc.city, loc.country))
-    );
-    locationKeysByBusiness.set(businessId, set);
-    return set;
-  };
-
-  const groupedLimited = grouped.slice(0, Math.max(BUSINESS_TARGET * 2, 3000));
-
-  for (const group of groupedLimited) {
-    let businessId = existingByCanonical.get(group.canonicalName);
-
-    if (!businessId) {
-      if (createdBusinesses >= createNeeded) continue;
-
-      const categoryId = categoryBySlug.get(group.categorySlug);
-      const created = await apiRequest("/businesses", {
-        method: "POST",
-        token: login.access_token,
-        body: {
-          name: group.displayName,
-          owner_name: "Imported Listing",
-          description: `Imported from Google Places. Rating ${group.topRating || 0} with ${group.topRatingCount || 0} reviews.`,
-          category_ids: categoryId ? [categoryId] : []
-        }
-      });
-
-      businessId = created?.data?.id;
-      if (!businessId) continue;
-
-      existingByCanonical.set(group.canonicalName, businessId);
-      createdBusinesses += 1;
-      await sleep(API_DELAY_MS);
-    } else {
-      reusedBusinesses += 1;
-    }
-
-    const existingLocationKeys = await getLocationKeySet(businessId);
-    const hasNoLocationsYet = existingLocationKeys.size === 0;
-
-    for (let i = 0; i < group.locations.length; i += 1) {
-      const loc = group.locations[i];
-      if (existingLocationKeys.has(loc.locationKey)) continue;
-
-      const isMain = hasNoLocationsYet && i === 0;
-      const locationName = isMain
-        ? `${group.displayName} (Main)`
-        : `${group.displayName} - ${loc.city || "Alternate"}`;
-
-      await apiRequest(`/businesses/${businessId}/locations`, {
-        method: "POST",
-        token: login.access_token,
-        body: {
-          location_name: locationName,
-          address_line: loc.addressLine,
-          city: loc.city || "Tirana",
-          region: loc.region || "Tirane",
-          country: loc.country || "Albania"
-        }
-      });
-
-      existingLocationKeys.add(loc.locationKey);
-      createdLocations += 1;
-      await sleep(API_DELAY_MS);
-    }
-
-    if (existingByCanonical.size >= BUSINESS_TARGET) {
-      break;
-    }
-  }
-
-  const finalBusinesses = await fetchAllBusinesses();
-  console.log(
-    JSON.stringify(
-      {
-        google_calls: collected.googleCalls,
-        queries_executed: collected.queriesExecuted,
-        unique_places_collected: collected.rows.length,
-        grouped_businesses_available: grouped.length,
-        existing_businesses_before: existingTotal,
-        businesses_created: createdBusinesses,
-        businesses_reused: reusedBusinesses,
-        locations_created: createdLocations,
-        businesses_total_after: finalBusinesses.length,
-        target: BUSINESS_TARGET,
-        target_reached: finalBusinesses.length >= BUSINESS_TARGET
-      },
-      null,
-      2
-    )
-  );
+  writeFallbackManifest(grouped);
+  await runSupabaseImport(grouped, collected);
 };
 
 main().catch((error) => {

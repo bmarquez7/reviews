@@ -1,3 +1,12 @@
+import {
+  clearApiBasePreference,
+  escapeAttr,
+  escapeHtml,
+  resolveApiBase,
+  safeUrl,
+  saveApiBasePreference
+} from './shared/client.js';
+
 const $ = (id) => document.getElementById(id);
 
 const FACTORS = [
@@ -11,29 +20,7 @@ const FACTORS = [
 ];
 
 const THEME_DEFAULTS = { brand: '#0f6a4d', bg: '#f5f2eb', card: '#fffdf7', iconUrl: './assets/new-roots-logo.png' };
-const PROD_API_BASE = "https://grow-albania-directory-api.onrender.com/v1";
 const isEmbedMode = document.body.classList.contains('embed-mode');
-
-const resolveInitialApiBase = () => {
-  const saved = localStorage.getItem('dir.apiBase');
-  if (saved) return saved;
-
-  const params = new URLSearchParams(window.location.search);
-  const fromParam = params.get('apiBase') || params.get('api');
-  if (fromParam) {
-    localStorage.setItem('dir.apiBase', fromParam);
-    return fromParam;
-  }
-
-  const fromGlobal = typeof window.DIRECTORY_API_BASE === 'string' ? window.DIRECTORY_API_BASE.trim() : '';
-  if (fromGlobal) return fromGlobal;
-
-  if (window.location.hostname.endsWith('netlify.app')) {
-    return PROD_API_BASE;
-  }
-
-  return 'http://127.0.0.1:4000/v1';
-};
 
 const state = {
   selectedCategoryId: null,
@@ -49,7 +36,7 @@ const state = {
   reviewPage: 1,
   reviewPageSize: 5,
   reviewRaw: [],
-  apiBase: resolveInitialApiBase(),
+  apiBase: resolveApiBase({ allowStored: true, allowParam: false }),
   token: localStorage.getItem('dir.token') || '',
   businesses: [],
   categories: [],
@@ -69,6 +56,8 @@ if ($('apiBase')) $('apiBase').value = state.apiBase;
 const setOut = (id, value) => { $(id).textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); };
 const errMsg = (err) => err?.error?.message || 'Request failed';
 const authHeaders = () => (state.token ? { Authorization: `Bearer ${state.token}` } : {});
+
+const sanitizeImageUrl = (value) => safeUrl(value, { allowHttp: true, allowHttps: true });
 
 const compactLocationLabel = (businessName, loc, index = 0) => {
   const city = String(loc?.city || '').trim();
@@ -190,8 +179,9 @@ const openAuthModal = () => {
 };
 const openImageLightbox = (url) => {
   const img = $('imageLightboxImg');
-  if (!img || !url) return;
-  img.src = url;
+  const safe = sanitizeImageUrl(url);
+  if (!img || !safe) return;
+  img.src = safe;
   $('imageLightbox')?.classList.remove('hidden');
 };
 
@@ -203,6 +193,11 @@ const req = async (path, options = {}) => {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw json;
   return json;
+};
+
+const formatScoreText = (value) => {
+  if (value == null || Number.isNaN(Number(value))) return 'n/a';
+  return Number(value).toFixed(1);
 };
 
 const reqForm = async (path, formData, options = {}) => {
@@ -287,7 +282,7 @@ const renderCategoryChips = () => {
   const select = $('categorySelect');
   if (select) {
     const options = ['<option value="">All categories</option>']
-      .concat(state.categories.map((c) => `<option value="${c.id}">${c.slug}</option>`))
+      .concat(state.categories.map((c) => `<option value="${escapeAttr(c.id)}">${escapeHtml(c.slug)}</option>`))
       .join('');
     select.innerHTML = options;
     select.value = state.selectedCategoryId || '';
@@ -297,7 +292,10 @@ const renderCategoryChips = () => {
   if (chips) {
     chips.innerHTML = state.categories.length
       ? state.categories
-          .map((c) => `<button type="button" class="chip ${state.selectedCategoryId === c.id ? 'active' : ''}" data-category-id="${c.id}">${c.slug}</button>`)
+          .map(
+            (c) =>
+              `<button type="button" class="chip ${state.selectedCategoryId === c.id ? 'active' : ''}" data-category-id="${escapeAttr(c.id)}">${escapeHtml(c.slug)}</button>`
+          )
           .join('')
       : '<span class="muted">Load categories to display chips.</span>';
   }
@@ -349,16 +347,8 @@ const startFeaturedRotation = () => {
 
 const loadFeaturedPool = async () => {
   if (state.featuredPool.length >= 20) return;
-  const pageSize = 50;
-  const maxPages = 6;
-  const all = [];
-
-  for (let page = 1; page <= maxPages; page += 1) {
-    const data = await req(`/businesses?page=${page}&page_size=${pageSize}&sort=top_rated`);
-    const items = data?.data?.items || [];
-    all.push(...items);
-    if (items.length < pageSize) break;
-  }
+  const data = await req('/businesses?page=1&page_size=100&sort=top_rated');
+  const all = data?.data?.items || [];
 
   const seen = new Set();
   state.featuredPool = all.filter((b) => {
@@ -374,7 +364,10 @@ const renderBusinesses = () => {
   if (!canBrowse) {
     if (state.featuredMode && state.businesses.length) {
       $('businessesList').innerHTML = state.businesses
-        .map((b) => `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${b.id}"><div class="item-title">${b.name}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${b.scores?.weighted_overall_display ?? 'n/a'} / 5</span></div><div class="item-sub">Reviews: ${b.scores?.business_rating_count ?? 0}</div><div class="item-sub">Locations: ${b.locations_count ?? 0}</div></article>`)
+        .map(
+          (b) =>
+            `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${escapeAttr(b.id)}"><div class="item-title">${escapeHtml(b.name)}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${formatScoreText(b.scores?.weighted_overall_display)} / 5</span></div><div class="item-sub">Reviews: ${Number(b.scores?.business_rating_count ?? 0)}</div><div class="item-sub">Locations: ${Number(b.locations_count ?? 0)}</div></article>`
+        )
         .join('');
       $('businessPageInfo').textContent = `Showing 20 random places (rotates every 20s)`;
     } else {
@@ -390,7 +383,12 @@ const renderBusinesses = () => {
 
   $('businessesList').innerHTML = !state.businesses.length
     ? '<div class="muted">No businesses found.</div>'
-    : state.businesses.map((b) => `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${b.id}"><div class="item-title">${b.name}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${b.scores?.weighted_overall_display ?? 'n/a'} / 5</span></div><div class="item-sub">Reviews: ${b.scores?.business_rating_count ?? 0}</div><div class="item-sub">Locations: ${b.locations_count ?? 0}</div></article>`).join('');
+    : state.businesses
+        .map(
+          (b) =>
+            `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${escapeAttr(b.id)}"><div class="item-title">${escapeHtml(b.name)}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${formatScoreText(b.scores?.weighted_overall_display)} / 5</span></div><div class="item-sub">Reviews: ${Number(b.scores?.business_rating_count ?? 0)}</div><div class="item-sub">Locations: ${Number(b.locations_count ?? 0)}</div></article>`
+        )
+        .join('');
 
   const totalPages = Math.max(1, Math.ceil(state.businessTotal / state.businessPageSize));
   $('businessPageInfo').textContent = `Page ${state.businessPage} / ${totalPages} (${state.businessTotal} businesses)`;
@@ -401,11 +399,12 @@ const renderBusinesses = () => {
 const renderMediaGrid = (id, urls = []) => {
   const root = $(id);
   if (!root) return;
-  root.innerHTML = (urls || []).length
-    ? urls
+  const safeUrls = (urls || []).map((url) => sanitizeImageUrl(url)).filter(Boolean);
+  root.innerHTML = safeUrls.length
+    ? safeUrls
         .map(
           (url) =>
-            `<button type="button" class="media-link" data-image-url="${url}"><img class="media-thumb" src="${url}" alt="Uploaded media" loading="lazy" /></button>`
+            `<button type="button" class="media-link" data-image-url="${escapeAttr(url)}"><img class="media-thumb" src="${escapeAttr(url)}" alt="Uploaded media" loading="lazy" /></button>`
         )
         .join('')
     : '';
@@ -419,8 +418,13 @@ const renderBusinessModal = () => {
   if (!body) return;
 
   const media = (b.media_urls || []).length
-    ? `<div class="media-grid">${b.media_urls
-        .map((url) => `<button type="button" class="media-link" data-image-url="${url}"><img class="media-thumb" src="${url}" alt="Business image" loading="lazy" /></button>`)
+    ? `<div class="media-grid">${(b.media_urls || [])
+        .map((url) => sanitizeImageUrl(url))
+        .filter(Boolean)
+        .map(
+          (url) =>
+            `<button type="button" class="media-link" data-image-url="${escapeAttr(url)}"><img class="media-thumb" src="${escapeAttr(url)}" alt="Business image" loading="lazy" /></button>`
+        )
         .join('')}</div>`
     : '';
 
@@ -428,17 +432,17 @@ const renderBusinessModal = () => {
     ? b.locations
         .map(
           (loc, index) =>
-            `<article class="item" data-modal-location-id="${loc.id}">
-              <div class="item-title">${compactLocationLabel(b.name, loc, index)}</div>
-              <div class="item-sub">${loc.address_line}, ${loc.city}, ${loc.country}</div>
+            `<article class="item" data-modal-location-id="${escapeAttr(loc.id)}">
+              <div class="item-title">${escapeHtml(compactLocationLabel(b.name, loc, index))}</div>
+              <div class="item-sub">${escapeHtml(`${loc.address_line}, ${loc.city}, ${loc.country}`)}</div>
             </article>`
         )
         .join('')
     : '<div class="muted">No locations available.</div>';
 
   body.innerHTML = `
-    <div class="muted">${b.description || 'No description yet.'}</div>
-    <div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${b.scores?.weighted_overall_display ?? 'n/a'} / 5</span></div>
+    <div class="muted">${escapeHtml(b.description || 'No description yet.')}</div>
+    <div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${formatScoreText(b.scores?.weighted_overall_display)} / 5</span></div>
     ${media}
     <h3>Select Location</h3>
     <div class="list small">${locations}</div>
@@ -453,11 +457,16 @@ const renderBusinessDetail = () => {
     return;
   }
   const b = state.selectedBusiness;
-  $('businessDetail').innerHTML = `<div><strong>${b.name}</strong></div><div class="muted">${b.description || 'No description yet.'}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${b.scores?.weighted_overall_display ?? 'n/a'} / 5</span></div>`;
+  $('businessDetail').innerHTML = `<div><strong>${escapeHtml(b.name)}</strong></div><div class="muted">${escapeHtml(b.description || 'No description yet.')}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${formatScoreText(b.scores?.weighted_overall_display)} / 5</span></div>`;
   renderMediaGrid('businessMedia', b.media_urls || []);
   $('locationsList').innerHTML = !b.locations?.length
     ? '<div class="muted">No locations yet. Use Business Tools to create one.</div>'
-    : b.locations.map((loc, index) => `<article class="item ${state.selectedLocation?.id === loc.id ? 'active' : ''}" data-location-id="${loc.id}"><div class="item-title">${compactLocationLabel(b.name, loc, index)}</div><div class="item-sub">${loc.address_line}, ${loc.city}, ${loc.country}</div></article>`).join('');
+    : b.locations
+        .map(
+          (loc, index) =>
+            `<article class="item ${state.selectedLocation?.id === loc.id ? 'active' : ''}" data-location-id="${escapeAttr(loc.id)}"><div class="item-title">${escapeHtml(compactLocationLabel(b.name, loc, index))}</div><div class="item-sub">${escapeHtml(`${loc.address_line}, ${loc.city}, ${loc.country}`)}</div></article>`
+        )
+        .join('');
 };
 
 const renderSelectedLocationMeta = () => {
@@ -535,15 +544,16 @@ const renderReviews = (comments = []) => {
   $('reviewsFeed').innerHTML = pageRows
     .map((c) => {
       const replies = (c.business_replies || [])
-        .map((r) => `<div class="reply-card"><div class="review-meta">Business reply · ${fmtDate(r.created_at)}</div><div class="review-text">${r.content || ''}</div></div>`)
+        .map((r) => `<div class="reply-card"><div class="review-meta">Business reply · ${escapeHtml(fmtDate(r.created_at))}</div><div class="review-text">${escapeHtml(r.content || '')}</div></div>`)
         .join('');
 
       const visit = c.visit_month && c.visit_year ? `Visited ${c.visit_month}/${c.visit_year}` : 'Visit date not provided';
-      const media = (c.media_urls || []).length
-        ? `<div class="media-grid">${c.media_urls
+      const mediaUrls = (c.media_urls || []).map((url) => sanitizeImageUrl(url)).filter(Boolean);
+      const media = mediaUrls.length
+        ? `<div class="media-grid">${mediaUrls
             .map(
               (url) =>
-                `<button type="button" class="media-link" data-image-url="${url}"><img class="media-thumb" src="${url}" alt="Review photo" loading="lazy" /></button>`
+                `<button type="button" class="media-link" data-image-url="${escapeAttr(url)}"><img class="media-thumb" src="${escapeAttr(url)}" alt="Review photo" loading="lazy" /></button>`
             )
             .join('')}</div>`
         : '';
@@ -555,12 +565,12 @@ const renderReviews = (comments = []) => {
               <span class="avatar">${initialsFromUser(c.user_id)}</span>
               <div>
                 <div><strong>User ${initialsFromUser(c.user_id)}</strong></div>
-                <div class="review-meta">${visit}</div>
+                <div class="review-meta">${escapeHtml(visit)}</div>
               </div>
             </div>
-            <div class="review-meta">${fmtDate(c.created_at)}</div>
+            <div class="review-meta">${escapeHtml(fmtDate(c.created_at))}</div>
           </div>
-          <div class="review-text">${c.content || ''}</div>
+          <div class="review-text">${escapeHtml(c.content || '')}</div>
           ${media}
           ${replies}
         </article>
@@ -615,7 +625,7 @@ const loadSearchSuggestions = async () => {
   try {
     const data = await req(`/businesses?page=1&page_size=8&sort=name&q=${encodeURIComponent(q)}`);
     const names = (data?.data?.items || []).map((b) => b.name).filter(Boolean);
-    host.innerHTML = names.map((name) => `<option value="${name}"></option>`).join('');
+    host.innerHTML = names.map((name) => `<option value="${escapeAttr(name)}"></option>`).join('');
   } catch {
     host.innerHTML = '';
   }
@@ -671,8 +681,12 @@ const doSignup = async (payload) => {
 const saveApiBaseBtn = $('saveApiBase');
 if (saveApiBaseBtn && $('apiBase')) {
   saveApiBaseBtn.addEventListener('click', () => {
-    state.apiBase = $('apiBase').value.trim();
-    localStorage.setItem('dir.apiBase', state.apiBase);
+    const next = saveApiBasePreference($('apiBase').value.trim());
+    if (!next) {
+      showToast('err', 'Use an approved API base only.');
+      return;
+    }
+    state.apiBase = next;
     showToast('ok', 'API base saved');
   });
 }
@@ -975,7 +989,7 @@ $('locationsList').addEventListener('click', async (e) => {
     await loadLocationDetail(card.dataset.locationId);
   } catch (err) {
     $('locationScores').innerHTML = '<span class="muted">Failed to load score summary.</span>';
-    $('reviewsFeed').innerHTML = `<div class="muted">${errMsg(err)}</div>`;
+    $('reviewsFeed').innerHTML = `<div class="muted">${escapeHtml(errMsg(err))}</div>`;
     showToast('err', errMsg(err));
   }
 });

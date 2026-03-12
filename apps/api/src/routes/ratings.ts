@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { ApiError } from '../lib/http-errors.js';
 import { supabaseAdmin } from '../lib/supabase.js';
-import { requireAuth, requirePoliciesAccepted } from '../lib/auth.js';
+import { requirePoliciesAccepted, requireVerifiedUser } from '../lib/auth.js';
 
 const HalfStep = z.number().min(0).max(5).refine((v) => Number.isInteger(v * 2), 'Must be 0..5 in 0.5 steps');
 
@@ -253,7 +253,7 @@ export const ratingRoutes: FastifyPluginAsync = async (app) => {
       }
     },
     async (request) => {
-    const user = await requireAuth(request);
+    const user = await requireVerifiedUser(request);
     const params = z.object({ commentId: z.string().uuid() }).parse(request.params);
     const body = CommentUpdateSchema.parse(request.body);
 
@@ -307,7 +307,7 @@ export const ratingRoutes: FastifyPluginAsync = async (app) => {
       }
     },
     async (request) => {
-    const user = await requireAuth(request);
+    const user = await requireVerifiedUser(request);
     const params = z.object({ commentId: z.string().uuid() }).parse(request.params);
 
     const existingRes = await supabaseAdmin
@@ -354,7 +354,7 @@ export const ratingRoutes: FastifyPluginAsync = async (app) => {
       }
     },
     async (request) => {
-    const user = await requireAuth(request);
+    const user = await requireVerifiedUser(request);
     const params = z.object({ commentId: z.string().uuid() }).parse(request.params);
 
     const commentRes = await supabaseAdmin

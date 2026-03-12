@@ -1,7 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { ApiError } from '../lib/http-errors.js';
-import { BUSINESS_MEDIA_BUCKET, REVIEW_MEDIA_BUCKET, ensureMediaBucket, listPublicMedia } from '../lib/media.js';
+import { lookupGoogleBusinessFallback } from '../lib/google-place-fallbacks.js';
+import { BUSINESS_MEDIA_BUCKET, REVIEW_MEDIA_BUCKET, ensureMediaBucket, listPublicMedia, listPublicMediaBatch } from '../lib/media.js';
 import { supabaseAdmin } from '../lib/supabase.js';
 
 const listBusinessesQuerySchema = z.object({
@@ -29,18 +30,6 @@ const buildRatingDistribution = (scores: number[]) => {
   return Array.from(bins.entries()).map(([score, count]) => ({ score, count }));
 };
 
-const parseImportedGoogleScore = (description?: string | null) => {
-  if (!description) return null;
-  const match = description.match(/rating\s+([0-5](?:\.\d+)?)\s+with\s+(\d+)\s+reviews?/i);
-  if (!match) return null;
-  const rating = Number(match[1]);
-  const count = Number(match[2]);
-  if (!Number.isFinite(rating) || !Number.isFinite(count)) return null;
-  const safeRating = Math.max(0, Math.min(5, rating));
-  const safeCount = Math.max(0, Math.round(count));
-  return { rating: safeRating, count: safeCount };
-};
-
 const withGoogleScoreFallback = (
   score: {
     business_id?: string;
@@ -50,14 +39,14 @@ const withGoogleScoreFallback = (
     unweighted_overall_raw?: number | null;
     unweighted_overall_display?: number | null;
   } | null | undefined,
-  business: { id?: string; description?: string | null }
+  business: { id?: string; name?: string | null; owner_name?: string | null }
 ) => {
   if (score && Number(score.business_rating_count || 0) > 0) return score;
-  const parsed = parseImportedGoogleScore(business.description);
+  const parsed = lookupGoogleBusinessFallback(business);
   if (!parsed) return score;
   return {
     business_id: score?.business_id ?? business.id,
-    business_rating_count: parsed.count,
+    business_rating_count: parsed.rating_count,
     weighted_overall_raw: parsed.rating,
     weighted_overall_display: Math.round(parsed.rating * 2) / 2,
     unweighted_overall_raw: parsed.rating,
@@ -123,7 +112,7 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
 
     let q = supabaseAdmin
       .from('businesses')
-      .select('id,name,description,created_at,status', { count: 'exact' })
+      .select('id,name,owner_name,created_at,status', { count: 'exact' })
       .eq('status', 'active');
 
     if (query.q) q = q.ilike('name', `%${query.q}%`);
@@ -438,41 +427,44 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
           }
         : null;
 
-      const items = await Promise.all(
-        (commentsRes.data ?? []).map(async (comment) => {
-          const rating = ratingsById.get(comment.rating_id);
-          const profile = profilesByUserId.get(comment.user_id);
-          const media_urls = await listPublicMedia(REVIEW_MEDIA_BUCKET, `comment/${comment.id}/`, 6);
-          return {
-            ...comment,
-            media_urls,
-            rating: rating
-              ? {
-                  overall_score_raw: Number(rating.overall_score),
-                  overall_score_display: Math.round(Number(rating.overall_score) * 2) / 2,
-                  factors: {
-                    pricing_transparency: Number(rating.pricing_transparency),
-                    friendliness: Number(rating.friendliness),
-                    lgbtq_acceptance: Number(rating.lgbtq_acceptance),
-                    racial_tolerance: Number(rating.racial_tolerance),
-                    religious_tolerance: Number(rating.religious_tolerance),
-                    accessibility_friendliness: Number(rating.accessibility_friendliness),
-                    cleanliness: Number(rating.cleanliness)
-                  }
-                }
-              : null,
-            reviewer: profile
-              ? {
-                  screen_name: profile.screen_name,
-                  country_of_origin: profile.country_of_origin,
-                  age_range_public: profile.age_public ? profile.age_range_public : null,
-                  profile_image_url: profile.profile_image_url
-                }
-              : null,
-            business_replies: repliesByComment.get(comment.id) ?? []
-          };
-        })
+      const commentMedia = await listPublicMediaBatch(
+        REVIEW_MEDIA_BUCKET,
+        (commentsRes.data ?? []).map((comment) => `comment/${comment.id}/`),
+        6
       );
+
+      const items = (commentsRes.data ?? []).map((comment) => {
+        const rating = ratingsById.get(comment.rating_id);
+        const profile = profilesByUserId.get(comment.user_id);
+        return {
+          ...comment,
+          media_urls: commentMedia.get(`comment/${comment.id}/`) ?? [],
+          rating: rating
+            ? {
+                overall_score_raw: Number(rating.overall_score),
+                overall_score_display: Math.round(Number(rating.overall_score) * 2) / 2,
+                factors: {
+                  pricing_transparency: Number(rating.pricing_transparency),
+                  friendliness: Number(rating.friendliness),
+                  lgbtq_acceptance: Number(rating.lgbtq_acceptance),
+                  racial_tolerance: Number(rating.racial_tolerance),
+                  religious_tolerance: Number(rating.religious_tolerance),
+                  accessibility_friendliness: Number(rating.accessibility_friendliness),
+                  cleanliness: Number(rating.cleanliness)
+                }
+              }
+            : null,
+          reviewer: profile
+            ? {
+                screen_name: profile.screen_name,
+                country_of_origin: profile.country_of_origin,
+                age_range_public: profile.age_public ? profile.age_range_public : null,
+                profile_image_url: profile.profile_image_url
+              }
+            : null,
+          business_replies: repliesByComment.get(comment.id) ?? []
+        };
+      });
 
       return {
         data: {
@@ -570,16 +562,17 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
 
     const ratingDistribution = buildRatingDistribution((ratingsRes.data ?? []).map((row) => Number(row.overall_score)));
 
-    const commentsWithMedia = await Promise.all(
-      (commentsRes.data ?? []).map(async (comment) => {
-        const mediaUrls = await listPublicMedia(REVIEW_MEDIA_BUCKET, `comment/${comment.id}/`, 6);
-        return {
-          ...comment,
-          media_urls: mediaUrls,
-          business_replies: repliesByComment.get(comment.id) ?? []
-        };
-      })
+    const commentMedia = await listPublicMediaBatch(
+      REVIEW_MEDIA_BUCKET,
+      (commentsRes.data ?? []).map((comment) => `comment/${comment.id}/`),
+      6
     );
+
+    const commentsWithMedia = (commentsRes.data ?? []).map((comment) => ({
+      ...comment,
+      media_urls: commentMedia.get(`comment/${comment.id}/`) ?? [],
+      business_replies: repliesByComment.get(comment.id) ?? []
+    }));
 
     return {
       data: {
