@@ -45,6 +45,7 @@ PROGRESS_EVERY = max(1, int(os.environ.get("GOOGLE_BACKFILL_PROGRESS_EVERY", "25
 DRY_RUN = str(os.environ.get("GOOGLE_BACKFILL_DRY_RUN", "0")) == "1" or "--dry-run" in os.sys.argv
 HTTP_RETRIES = max(1, int(os.environ.get("GOOGLE_BACKFILL_HTTP_RETRIES", "4")))
 HTTP_BACKOFF_MS = max(100, int(os.environ.get("GOOGLE_BACKFILL_HTTP_BACKOFF_MS", "800")))
+MATCH_MODE = normalize_spaces(os.environ.get("GOOGLE_BACKFILL_MATCH_MODE", "full")).lower() if "normalize_spaces" in globals() else os.environ.get("GOOGLE_BACKFILL_MATCH_MODE", "full").strip().lower()
 
 SEARCH_COST_USD = 32 / 1000
 DETAILS_COST_USD = 20 / 1000
@@ -251,14 +252,9 @@ def google_place_details(resource_name_or_id):
 def google_photo_bytes(photo_name):
     url = (
         f"https://places.googleapis.com/v1/{photo_name}/media?"
-        f"maxHeightPx={MAX_PHOTO_HEIGHT}&skipHttpRedirect=true&key={urllib.parse.quote(GOOGLE_API_KEY)}"
+        f"maxHeightPx={MAX_PHOTO_HEIGHT}&key={urllib.parse.quote(GOOGLE_API_KEY)}"
     )
-    meta_req = urllib.request.Request(url, method="GET")
-    payload = request_json(meta_req, timeout=90)
-    photo_uri = payload.get("photoUri")
-    if not photo_uri:
-        return None, None
-    photo_req = urllib.request.Request(photo_uri, method="GET")
+    photo_req = urllib.request.Request(url, method="GET")
     content, headers = request_bytes(photo_req, timeout=120, return_headers=True)
     content_type = headers.get("Content-Type", "image/jpeg")
     return content, content_type
@@ -298,9 +294,12 @@ def build_queries(business, location):
     parts = [business["name"], location.get("address_line"), location.get("city"), "Albania"]
     query1 = ", ".join([normalize_spaces(p) for p in parts if normalize_spaces(p)])
     query2 = ", ".join([normalize_spaces(p) for p in [business["name"], location.get("city"), "Albania"] if normalize_spaces(p)])
-    if query2 == query1:
-        return [query1]
-    return [query1, query2]
+    query3 = ", ".join([normalize_spaces(p) for p in [business["name"], "Albania"] if normalize_spaces(p)])
+    queries = []
+    for query in [query1, query2, query3]:
+        if query and query not in queries:
+            queries.append(query)
+    return queries
 
 
 def build_hours_payload(weekday_descriptions):
@@ -391,6 +390,24 @@ def write_report(report):
     return path
 
 
+def write_unmatched(unmatched):
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    path = REPORT_DIR / f"google_backfill_unmatched_{stamp}.json"
+    payload = {
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "count": len(unmatched),
+        "items": unmatched,
+    }
+    path.write_text(json.dumps(payload, indent=2))
+    return path
+
+
+def latest_file(pattern):
+    candidates = sorted(REPORT_DIR.glob(pattern), key=lambda item: item.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
+
+
 def main():
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         raise SystemExit("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
@@ -407,18 +424,43 @@ def main():
         if row.get("business_id") in business_map:
             locations_by_business[row["business_id"]].append(row)
 
+    unmatched_mode = MATCH_MODE in {"unmatched", "unmatched-only", "second-pass"}
+    unmatched_source = None
+    if unmatched_mode:
+        unmatched_path = os.environ.get("GOOGLE_BACKFILL_UNMATCHED_PATH")
+        source_path = Path(unmatched_path) if unmatched_path else latest_file("google_backfill_unmatched_*.json")
+        if not source_path or not source_path.exists():
+            raise SystemExit("Unmatched-only mode requested but no unmatched file was found")
+        unmatched_source = source_path
+        unmatched_payload = json.loads(source_path.read_text())
+        unmatched_items = unmatched_payload.get("items") or []
+        allowed_location_ids = {row["location_id"] for row in unmatched_items if row.get("location_id")}
+        allowed_business_ids = {row["business_id"] for row in unmatched_items if row.get("business_id")}
+        businesses = [row for row in businesses if row["id"] in allowed_business_ids]
+        business_map = {row["id"]: row for row in businesses}
+        filtered_locations = []
+        for row in locations:
+            if row.get("business_id") in business_map and row.get("id") in allowed_location_ids:
+                filtered_locations.append(row)
+        locations = filtered_locations
+        locations_by_business = defaultdict(list)
+        for row in locations:
+            locations_by_business[row["business_id"]].append(row)
+
     total_businesses = len(businesses)
     total_locations = sum(len(locations_by_business[row["id"]]) for row in businesses)
     projected_full_cost = ensure_budget_or_die(total_locations, total_businesses)
 
     preview = {
-        "mode": "dry-run" if DRY_RUN else "backfill",
+        "mode": "dry-run" if DRY_RUN else ("unmatched-only" if unmatched_mode else "backfill"),
         "businesses": total_businesses,
         "locations": total_locations,
         "photos_per_business": PHOTOS_PER_BUSINESS,
         "projected_worst_case_google_cost_usd": projected_full_cost,
         "approved_budget_usd": MAX_BUDGET_USD,
     }
+    if unmatched_source:
+        preview["unmatched_source"] = str(unmatched_source)
     print(json.dumps(preview, indent=2))
     if DRY_RUN:
         return
@@ -583,13 +625,17 @@ def main():
 
     report = {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "mode": "unmatched-only" if unmatched_mode else "backfill",
         "approved_budget_usd": MAX_BUDGET_USD,
         "photos_per_business_target": PHOTOS_PER_BUSINESS,
         "projected_worst_case_google_cost_usd": projected_full_cost,
         "projected_run_cost_usd_without_free_tier": projected_cost,
         "stats": stats,
+        "unmatched_count": len(unmatched),
         "unmatched_sample": unmatched[:100],
     }
+    unmatched_path = write_unmatched(unmatched)
+    report["unmatched_path"] = str(unmatched_path)
     report_path = write_report(report)
     print(json.dumps({"report_path": str(report_path), **report}, indent=2))
 
