@@ -63,6 +63,14 @@ export const uploadImageToBucket = async (params: {
 const buildPublicUrl = (bucket: string, objectPath: string) =>
   supabaseAdmin.storage.from(bucket).getPublicUrl(objectPath).data.publicUrl;
 
+const normalizePrefix = (prefix: string) => String(prefix || '').replace(/^\/+|\/+$/g, '');
+
+const joinObjectPath = (prefix: string, name: string) => {
+  const base = normalizePrefix(prefix);
+  const child = String(name || '').replace(/^\/+/, '');
+  return base ? `${base}/${child}` : child;
+};
+
 const mediaCacheKey = (bucket: string, prefix: string, limit: number) => `${bucket}:${prefix}:${limit}`;
 
 const getCachedMedia = (bucket: string, prefix: string, limit: number) => {
@@ -98,41 +106,30 @@ export const listPublicMediaBatch = async (bucket: string, prefixes: string[], l
 
   if (!uncached.length) return result;
 
-  const orFilter = uncached.map((prefix) => `name.like.${prefix}%`).join(',');
-  const objectRes = await supabaseAdmin
-    .schema('storage')
-    .from('objects')
-    .select('name,created_at')
-    .eq('bucket_id', bucket)
-    .or(orFilter)
-    .order('created_at', { ascending: false })
-    .limit(Math.max(uncached.length * limit * 4, uncached.length * limit));
+  const listed = await Promise.all(
+    uncached.map(async (prefix) => {
+      const normalizedPrefix = normalizePrefix(prefix);
+      const { data, error } = await supabaseAdmin.storage.from(bucket).list(normalizedPrefix, {
+        limit,
+        sortBy: { column: 'created_at', order: 'desc' }
+      });
 
-  if (objectRes.error) {
-    for (const prefix of uncached) {
-      result.set(prefix, []);
-      setCachedMedia(bucket, prefix, limit, []);
-    }
-    return result;
-  }
+      if (error || !data) {
+        return { prefix, urls: [] as string[] };
+      }
 
-  const grouped = new Map<string, string[]>();
-  for (const prefix of uncached) grouped.set(prefix, []);
+      const urls = data
+        .filter((item) => item?.name && !String(item.name).endsWith('/'))
+        .slice(0, limit)
+        .map((item) => buildPublicUrl(bucket, joinObjectPath(prefix, item.name)));
 
-  for (const row of objectRes.data ?? []) {
-    const objectName = String(row.name || '');
-    const prefix = uncached.find((candidate) => objectName.startsWith(candidate));
-    if (!prefix) continue;
-    const current = grouped.get(prefix) ?? [];
-    if (current.length >= limit) continue;
-    current.push(buildPublicUrl(bucket, objectName));
-    grouped.set(prefix, current);
-  }
+      return { prefix, urls };
+    })
+  );
 
-  for (const prefix of uncached) {
-    const urls = grouped.get(prefix) ?? [];
-    result.set(prefix, urls);
-    setCachedMedia(bucket, prefix, limit, urls);
+  for (const entry of listed) {
+    result.set(entry.prefix, entry.urls);
+    setCachedMedia(bucket, entry.prefix, limit, entry.urls);
   }
 
   return result;
