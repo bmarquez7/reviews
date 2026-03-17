@@ -2,6 +2,7 @@ import {
   clearApiBasePreference,
   escapeAttr,
   escapeHtml,
+  formatDisplayName,
   resolveApiBase,
   safeUrl,
   saveApiBasePreference
@@ -73,7 +74,7 @@ const compactLocationLabel = (businessName, loc, index = 0) => {
   if (/^\(?main\)?$/i.test(label) || /^main\s+location$/i.test(label)) return 'Main location';
   if (!label) return city ? `${city} location` : 'Main location';
   if (city && label.toLowerCase() === city.toLowerCase()) return `${city} location`;
-  return label;
+  return formatDisplayName(label);
 };
 
 const showToast = (type, message) => {
@@ -366,7 +367,7 @@ const renderBusinesses = () => {
       $('businessesList').innerHTML = state.businesses
         .map(
           (b) =>
-            `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${escapeAttr(b.id)}"><div class="item-title">${escapeHtml(b.name)}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${formatScoreText(b.scores?.weighted_overall_display)} / 5</span></div><div class="item-sub">Reviews: ${Number(b.scores?.business_rating_count ?? 0)}</div><div class="item-sub">Locations: ${Number(b.locations_count ?? 0)}</div></article>`
+            `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${escapeAttr(b.id)}"><div class="item-title">${escapeHtml(formatDisplayName(b.name))}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${formatScoreText(b.scores?.weighted_overall_display)} / 5</span></div><div class="item-sub">Reviews: ${Number(b.scores?.business_rating_count ?? 0)}</div><div class="item-sub">Locations: ${Number(b.locations_count ?? 0)}</div></article>`
         )
         .join('');
       $('businessPageInfo').textContent = `Showing 20 random places (rotates every 20s)`;
@@ -386,7 +387,7 @@ const renderBusinesses = () => {
     : state.businesses
         .map(
           (b) =>
-            `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${escapeAttr(b.id)}"><div class="item-title">${escapeHtml(b.name)}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${formatScoreText(b.scores?.weighted_overall_display)} / 5</span></div><div class="item-sub">Reviews: ${Number(b.scores?.business_rating_count ?? 0)}</div><div class="item-sub">Locations: ${Number(b.locations_count ?? 0)}</div></article>`
+            `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${escapeAttr(b.id)}"><div class="item-title">${escapeHtml(formatDisplayName(b.name))}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${formatScoreText(b.scores?.weighted_overall_display)} / 5</span></div><div class="item-sub">Reviews: ${Number(b.scores?.business_rating_count ?? 0)}</div><div class="item-sub">Locations: ${Number(b.locations_count ?? 0)}</div></article>`
         )
         .join('');
 
@@ -413,7 +414,7 @@ const renderMediaGrid = (id, urls = []) => {
 const renderBusinessModal = () => {
   const b = state.selectedBusiness;
   if (!b) return;
-  $('businessModalTitle').textContent = b.name || 'Business';
+  $('businessModalTitle').textContent = formatDisplayName(b.name) || 'Business';
   const body = $('businessModalBody');
   if (!body) return;
 
@@ -457,7 +458,7 @@ const renderBusinessDetail = () => {
     return;
   }
   const b = state.selectedBusiness;
-  $('businessDetail').innerHTML = `<div><strong>${escapeHtml(b.name)}</strong></div><div class="muted">${escapeHtml(b.description || 'No description yet.')}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${formatScoreText(b.scores?.weighted_overall_display)} / 5</span></div>`;
+  $('businessDetail').innerHTML = `<div><strong>${escapeHtml(formatDisplayName(b.name))}</strong></div><div class="muted">${escapeHtml(b.description || 'No description yet.')}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${formatScoreText(b.scores?.weighted_overall_display)} / 5</span></div>`;
   renderMediaGrid('businessMedia', b.media_urls || []);
   $('locationsList').innerHTML = !b.locations?.length
     ? '<div class="muted">No locations yet. Use Business Tools to create one.</div>'
@@ -624,7 +625,7 @@ const loadSearchSuggestions = async () => {
   }
   try {
     const data = await req(`/businesses?page=1&page_size=8&sort=name&q=${encodeURIComponent(q)}`);
-    const names = (data?.data?.items || []).map((b) => b.name).filter(Boolean);
+    const names = (data?.data?.items || []).map((b) => formatDisplayName(b.name)).filter(Boolean);
     host.innerHTML = names.map((name) => `<option value="${escapeAttr(name)}"></option>`).join('');
   } catch {
     host.innerHTML = '';

@@ -1,6 +1,7 @@
 import {
   escapeAttr,
   escapeHtml,
+  formatDisplayName,
   resolveApiBase,
   safeJsonText,
   safeUrl
@@ -265,7 +266,7 @@ const compactLocationLabel = (businessName, loc, index = 0) => {
   if (/^\(?main\)?$/i.test(label) || /^main\s+location$/i.test(label)) return 'Main location';
   if (!label) return city ? `${city} location` : 'Main location';
   if (city && label.toLowerCase() === city.toLowerCase()) return `${city} location`;
-  return label;
+  return formatDisplayName(label);
 };
 
 const renderReviewLocationOptions = (business) => {
@@ -457,7 +458,7 @@ const buildHoursPayloadFromForm = () => {
 
 const renderBusiness = (b) => {
   state.business = b;
-  $('bizPageTitle').textContent = b.name || 'Business';
+  $('bizPageTitle').textContent = formatDisplayName(b.name) || 'Business';
   $('bizHeaderMeta').innerHTML = `
     <div class="row gap-sm center">${logoRatingMarkup(b.scores?.weighted_overall_display)}<strong>${formatScoreText(b.scores?.weighted_overall_display)} / 5</strong> <span class="muted">(${Number(b.scores?.business_rating_count ?? 0)} reviews)</span></div>
     <div class="muted">${b.is_claimed ? 'Claimed' : 'Unclaimed'} • ${escapeHtml(b.categories?.map((c) => c.categories?.slug || c.slug || '').filter(Boolean).join(', ') || 'General')}</div>
@@ -484,7 +485,7 @@ const renderBusiness = (b) => {
   $('bizLinks').innerHTML = links.join('');
 
   $('bizInfo').innerHTML = `
-    <div><strong>${escapeHtml(b.name)}</strong></div>
+    <div><strong>${escapeHtml(formatDisplayName(b.name))}</strong></div>
     <div class="muted">${escapeHtml(b.description || 'No description available yet.')}</div>
     <div class="muted">${escapeHtml(b.mission_statement || '')}</div>
   `;

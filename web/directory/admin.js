@@ -2,6 +2,7 @@ import {
   clearApiBasePreference,
   escapeAttr,
   escapeHtml,
+  formatDisplayName,
   resolveApiBase,
   safeJsonText,
   saveApiBasePreference
@@ -204,7 +205,7 @@ const renderBusinessEditor = () => {
         .map(
           (loc) =>
             `<article class="item">
-              <div class="item-title">${escapeHtml(loc.location_name || `${loc.city} location`)}</div>
+              <div class="item-title">${escapeHtml(formatDisplayName(loc.location_name || `${loc.city} location`))}</div>
               <div class="grid2">
                 <input data-loc-field="location_name" data-loc-id="${escapeAttr(loc.id)}" value="${escapeAttr(loc.location_name || '')}" placeholder="Location name" />
                 <input data-loc-field="address_line" data-loc-id="${escapeAttr(loc.id)}" value="${escapeAttr(loc.address_line || '')}" placeholder="Address line" />
@@ -231,7 +232,7 @@ const renderBusinessResults = (items) => {
     : items
         .map(
           (b) =>
-            `<button type="button" class="item" data-business-id="${escapeAttr(b.id)}"><div class="item-title">${escapeHtml(b.name)}</div><div class="item-sub">Reviews: ${Number(b.scores?.business_rating_count ?? 0)}</div></button>`
+            `<button type="button" class="item" data-business-id="${escapeAttr(b.id)}"><div class="item-title">${escapeHtml(formatDisplayName(b.name))}</div><div class="item-sub">Reviews: ${Number(b.scores?.business_rating_count ?? 0)}</div></button>`
         )
         .join('');
 };
