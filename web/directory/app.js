@@ -3,6 +3,7 @@ import {
   escapeAttr,
   escapeHtml,
   formatDisplayName,
+  installEmbedResize,
   resolveApiBase,
   safeUrl,
   saveApiBasePreference
@@ -1178,6 +1179,7 @@ $('businessImageForm').addEventListener('submit', async (e) => {
 });
 
 (async () => {
+  installEmbedResize();
   ensureOverlays();
   loadTheme();
   await syncAdminUI();

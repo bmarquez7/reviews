@@ -135,3 +135,70 @@ export const safeJsonText = (value) => {
     return '';
   }
 };
+
+export const installEmbedResize = () => {
+  if (window.parent === window) return () => {};
+
+  let frame = 0;
+  let lastHeight = 0;
+  let resizeObserver = null;
+  let mutationObserver = null;
+
+  const measure = () =>
+    Math.max(
+      document.body?.scrollHeight || 0,
+      document.body?.offsetHeight || 0,
+      document.documentElement?.scrollHeight || 0,
+      document.documentElement?.offsetHeight || 0
+    );
+
+  const postHeight = () => {
+    frame = 0;
+    const height = measure();
+    if (!height || Math.abs(height - lastHeight) < 2) return;
+    lastHeight = height;
+    window.parent.postMessage(
+      {
+        type: 'directory:resize',
+        height,
+        path: window.location.pathname
+      },
+      '*'
+    );
+  };
+
+  const schedule = () => {
+    if (frame) return;
+    frame = window.requestAnimationFrame(postHeight);
+  };
+
+  window.addEventListener('load', schedule);
+  window.addEventListener('resize', schedule);
+
+  if (document.body && 'ResizeObserver' in window) {
+    resizeObserver = new ResizeObserver(schedule);
+    resizeObserver.observe(document.body);
+    resizeObserver.observe(document.documentElement);
+  }
+
+  if (document.body) {
+    mutationObserver = new MutationObserver(schedule);
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      characterData: true
+    });
+  }
+
+  [100, 350, 800, 1500].forEach((delay) => window.setTimeout(schedule, delay));
+  schedule();
+
+  return () => {
+    window.removeEventListener('load', schedule);
+    window.removeEventListener('resize', schedule);
+    if (frame) window.cancelAnimationFrame(frame);
+    resizeObserver?.disconnect();
+    mutationObserver?.disconnect();
+  };
+};

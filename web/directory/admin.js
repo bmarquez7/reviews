@@ -3,6 +3,7 @@ import {
   escapeAttr,
   escapeHtml,
   formatDisplayName,
+  installEmbedResize,
   resolveApiBase,
   safeJsonText,
   saveApiBasePreference
@@ -706,6 +707,7 @@ $('adminImageBatchForm').addEventListener('submit', async (e) => {
 });
 
 (async () => {
+  installEmbedResize();
   if (!state.token) {
     window.location.href = './embed.html';
     return;

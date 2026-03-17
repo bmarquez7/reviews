@@ -2,6 +2,7 @@ import {
   escapeAttr,
   escapeHtml,
   formatDisplayName,
+  installEmbedResize,
   resolveApiBase,
   safeJsonText,
   safeUrl
@@ -987,6 +988,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 (async () => {
+  installEmbedResize();
   applyTheme();
   renderReviewFactors();
   initProfileTabs();
