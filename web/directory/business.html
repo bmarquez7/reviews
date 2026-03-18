@@ -164,6 +164,34 @@
           <button type="submit">Submit Review + Photos</button>
         </form>
         <div id="reviewFactors" class="factor-grid" style="margin-top:0.6rem;"></div>
+        <section class="review-secondary-panel">
+          <h3>Extra details</h3>
+          <div class="secondary-review-grid">
+            <label class="range-field" for="reviewWifiSpeed">
+              <span>Wi-Fi Speed</span>
+              <input id="reviewWifiSpeed" type="range" min="0" max="5" step="0.5" value="2.5" />
+              <div class="range-meta">
+                <span>Slow</span>
+                <strong id="reviewWifiSpeedValue">Balanced</strong>
+                <span>Fast</span>
+              </div>
+            </label>
+            <label class="range-field" for="reviewPlaceSize">
+              <span>Size</span>
+              <input id="reviewPlaceSize" type="range" min="1" max="4" step="1" value="2" />
+              <div class="range-meta">
+                <span>Small</span>
+                <strong id="reviewPlaceSizeValue">Medium</strong>
+                <span>Extra Large</span>
+              </div>
+            </label>
+          </div>
+          <div id="reviewBinaryFields" class="binary-field-grid"></div>
+          <div id="reviewFoodFieldsWrap" class="review-food-fields hidden">
+            <h3>Food options</h3>
+            <div id="reviewFoodBinaryFields" class="binary-field-grid"></div>
+          </div>
+        </section>
       </div>
     </div>
 

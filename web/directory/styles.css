@@ -318,6 +318,81 @@ button:hover { filter: brightness(1.05); }
   color: #687487;
 }
 
+.review-secondary-panel {
+  margin-top: 0.4rem;
+  border-top: 1px solid #e7dfd2;
+  padding-top: 0.75rem;
+}
+
+.secondary-review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.65rem;
+}
+
+.range-field {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.65rem;
+  background: #fffaf1;
+}
+
+.range-field input[type="range"] {
+  width: 100%;
+  padding: 0;
+  border: 0;
+}
+
+.range-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: #5f5342;
+}
+
+.binary-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.7rem;
+}
+
+.binary-field {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.65rem;
+  background: #fffaf1;
+}
+
+.binary-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.45rem;
+}
+
+.binary-options {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.binary-btn {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.binary-btn.active {
+  background: #0f6a4d;
+  color: #1f1b16;
+}
+
+.review-food-fields {
+  margin-top: 0.85rem;
+}
+
 .toast-host { position: fixed; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 0.45rem; z-index: 30; }
 .toast { min-width: 240px; max-width: 360px; color: var(--ink); border-radius: 9px; padding: 0.55rem 0.65rem; font-size: 0.88rem; box-shadow: 0 8px 16px rgba(0, 0, 0, 0.18); }
 .toast.ok { background: #0f6a4d; }

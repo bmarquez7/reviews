@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ApiError } from '../lib/http-errors.js';
 import { lookupGoogleBusinessFallback } from '../lib/google-place-fallbacks.js';
 import { BUSINESS_MEDIA_BUCKET, REVIEW_MEDIA_BUCKET, ensureMediaBucket, listPublicMedia, listPublicMediaBatch } from '../lib/media.js';
+import { parseSecondaryMeta } from '../lib/secondary-rating.js';
 import { supabaseAdmin } from '../lib/supabase.js';
 
 const listBusinessesQuerySchema = z.object({
@@ -363,7 +364,7 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
       const userIds = Array.from(new Set((commentsRes.data ?? []).map((row) => row.user_id)));
       const commentIds = (commentsRes.data ?? []).map((row) => row.id);
 
-      const [ratingsRes, profilesRes, repliesRes] = await Promise.all([
+      const [ratingsRes, secondaryRes, profilesRes, repliesRes] = await Promise.all([
         ratingIds.length
           ? supabaseAdmin
               .from('ratings')
@@ -371,6 +372,14 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
                 'id,overall_score,pricing_transparency,friendliness,lgbtq_acceptance,racial_tolerance,religious_tolerance,accessibility_friendliness,cleanliness'
               )
               .in('id', ratingIds)
+          : Promise.resolve({ data: [], error: null }),
+        ratingIds.length
+          ? supabaseAdmin
+              .from('secondary_ratings')
+              .select(
+                'rating_id,pricing_value,child_care_availability,child_friendliness,party_size_accommodations,accessibility_details_score,accessibility_notes'
+              )
+              .in('rating_id', ratingIds)
           : Promise.resolve({ data: [], error: null }),
         userIds.length
           ? supabaseAdmin
@@ -388,11 +397,20 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
           : Promise.resolve({ data: [], error: null })
       ]);
 
-      if (ratingsRes.error || profilesRes.error || repliesRes.error) {
-        throw new ApiError(500, 'INTERNAL_ERROR', ratingsRes.error?.message ?? profilesRes.error?.message ?? repliesRes.error?.message ?? 'Lookup failed');
+      if (ratingsRes.error || secondaryRes.error || profilesRes.error || repliesRes.error) {
+        throw new ApiError(
+          500,
+          'INTERNAL_ERROR',
+          ratingsRes.error?.message ??
+            secondaryRes.error?.message ??
+            profilesRes.error?.message ??
+            repliesRes.error?.message ??
+            'Lookup failed'
+        );
       }
 
       const ratingsById = new Map((ratingsRes.data ?? []).map((row) => [row.id, row]));
+      const secondaryByRatingId = new Map((secondaryRes.data ?? []).map((row) => [row.rating_id, row]));
       const profilesByUserId = new Map((profilesRes.data ?? []).map((row) => [row.user_id, row]));
       const repliesByComment = new Map<string, unknown[]>();
       for (const reply of repliesRes.data ?? []) {
@@ -435,6 +453,8 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
 
       const items = (commentsRes.data ?? []).map((comment) => {
         const rating = ratingsById.get(comment.rating_id);
+        const secondary = secondaryByRatingId.get(comment.rating_id);
+        const secondaryMeta = parseSecondaryMeta(secondary?.accessibility_notes);
         const profile = profilesByUserId.get(comment.user_id);
         return {
           ...comment,
@@ -451,7 +471,33 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
                   religious_tolerance: Number(rating.religious_tolerance),
                   accessibility_friendliness: Number(rating.accessibility_friendliness),
                   cleanliness: Number(rating.cleanliness)
-                }
+                },
+                secondary: secondary
+                  ? {
+                      pricing_value: secondary.pricing_value == null ? null : Number(secondary.pricing_value),
+                      child_care_availability:
+                        secondary.child_care_availability == null ? null : Number(secondary.child_care_availability),
+                      child_friendliness:
+                        secondary.child_friendliness == null ? null : Number(secondary.child_friendliness),
+                      party_size_accommodations:
+                        secondary.party_size_accommodations == null ? null : Number(secondary.party_size_accommodations),
+                      accessibility_details_score:
+                        secondary.accessibility_details_score == null
+                          ? null
+                          : Number(secondary.accessibility_details_score),
+                      accessibility_notes: secondaryMeta.accessibility_notes ?? null,
+                      wifi_speed: secondaryMeta.wifi_speed ?? null,
+                      place_size: secondaryMeta.place_size ?? null,
+                      kid_friendly: secondaryMeta.kid_friendly ?? null,
+                      pet_friendly: secondaryMeta.pet_friendly ?? null,
+                      vegan_friendly: secondaryMeta.vegan_friendly ?? null,
+                      vegetarian_friendly: secondaryMeta.vegetarian_friendly ?? null,
+                      halal: secondaryMeta.halal ?? null,
+                      sugar_free_options: secondaryMeta.sugar_free_options ?? null,
+                      gluten_free_options: secondaryMeta.gluten_free_options ?? null,
+                      accommodates_allergies: secondaryMeta.accommodates_allergies ?? null
+                    }
+                  : null
               }
             : null,
           reviewer: profile

@@ -20,6 +20,34 @@ const FACTORS = [
   ['cleanliness', 'Cleanliness']
 ];
 
+const REVIEW_BINARY_FIELDS = [
+  ['kid_friendly', 'Kid Friendly'],
+  ['pet_friendly', 'Pet Friendly']
+];
+
+const REVIEW_FOOD_BINARY_FIELDS = [
+  ['vegan_friendly', 'Vegan Friendly'],
+  ['vegetarian_friendly', 'Vegetarian Friendly'],
+  ['halal', 'Halal'],
+  ['sugar_free_options', 'Sugar Free Options'],
+  ['gluten_free_options', 'Gluten Free Options'],
+  ['accommodates_allergies', 'Accommodates Allergies']
+];
+
+const SIZE_LABELS = {
+  small: 'Small',
+  medium: 'Medium',
+  large: 'Large',
+  extra_large: 'Extra Large'
+};
+
+const SIZE_BY_SLIDER = {
+  1: 'small',
+  2: 'medium',
+  3: 'large',
+  4: 'extra_large'
+};
+
 const HOURS_DAYS = [
   ['monday', 'hoursMonday'],
   ['tuesday', 'hoursTuesday'],
@@ -42,6 +70,7 @@ const state = {
   total: 0,
   reviewLocationId: null,
   reviewFactors: Object.fromEntries(FACTORS.map(([key]) => [key, 5])),
+  reviewBinary: {},
   business: null,
   hoursLocationId: null,
   canEditBusiness: false,
@@ -128,6 +157,91 @@ const renderReviewFactors = () => {
       </div>
     `;
   }).join('');
+};
+
+const wifiSpeedLabel = (value) => {
+  const score = Number(value);
+  if (!Number.isFinite(score)) return 'Not set';
+  if (score <= 1) return 'Slow';
+  if (score <= 2) return 'Okay';
+  if (score <= 3.5) return 'Balanced';
+  if (score <= 4.5) return 'Fast';
+  return 'Very Fast';
+};
+
+const businessSupportsFoodOptions = (business) => {
+  const slugs = (business?.categories || [])
+    .map((item) => item?.categories?.slug || item?.slug || '')
+    .filter(Boolean)
+    .map((slug) => String(slug).toLowerCase());
+  if (slugs.some((slug) => ['cafe', 'restaurant', 'hotel'].includes(slug))) return true;
+  return /\b(cafe|coffee|restaurant|bar|bistro|pizza|burger|bakery|grill|pub|lounge|hotel|hostel)\b/i.test(
+    String(business?.name || '')
+  );
+};
+
+const renderBinaryFieldGroup = (fields, hostId) => {
+  const host = $(hostId);
+  if (!host) return;
+  host.innerHTML = fields
+    .map(([key, label]) => {
+      const value = state.reviewBinary[key];
+      return `
+        <div class="binary-field">
+          <div class="binary-label">${escapeHtml(label)}</div>
+          <div class="binary-options" data-binary-field="${escapeAttr(key)}">
+            <button type="button" class="binary-btn ${value === true ? 'active' : ''}" data-binary-value="yes">Yes</button>
+            <button type="button" class="binary-btn ${value === false ? 'active' : ''}" data-binary-value="no">No</button>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+};
+
+const renderReviewSecondaryFields = (business) => {
+  const supportsFood = businessSupportsFoodOptions(business);
+  const wifiInput = $('reviewWifiSpeed');
+  const sizeInput = $('reviewPlaceSize');
+  if (wifiInput) $('reviewWifiSpeedValue').textContent = wifiSpeedLabel(wifiInput.value);
+  if (sizeInput) $('reviewPlaceSizeValue').textContent = SIZE_LABELS[SIZE_BY_SLIDER[sizeInput.value] || 'medium'];
+  if (!supportsFood) {
+    for (const [key] of REVIEW_FOOD_BINARY_FIELDS) {
+      state.reviewBinary[key] = undefined;
+    }
+  }
+  renderBinaryFieldGroup(REVIEW_BINARY_FIELDS, 'reviewBinaryFields');
+  renderBinaryFieldGroup(REVIEW_FOOD_BINARY_FIELDS, 'reviewFoodBinaryFields');
+  $('reviewFoodFieldsWrap')?.classList.toggle('hidden', !supportsFood);
+};
+
+const readReviewSecondaryPayload = () => {
+  const payload = {
+    wifi_speed: Number($('reviewWifiSpeed')?.value || 0),
+    place_size: SIZE_BY_SLIDER[$('reviewPlaceSize')?.value || '2']
+  };
+
+  for (const [key] of [...REVIEW_BINARY_FIELDS, ...REVIEW_FOOD_BINARY_FIELDS]) {
+    if (typeof state.reviewBinary[key] === 'boolean') {
+      payload[key] = state.reviewBinary[key];
+    }
+  }
+
+  return payload;
+};
+
+const renderSecondaryChips = (secondary) => {
+  if (!secondary) return '';
+  const chips = [];
+
+  if (secondary.wifi_speed != null) chips.push(`Wi-Fi: ${wifiSpeedLabel(secondary.wifi_speed)}`);
+  if (secondary.place_size) chips.push(`Size: ${SIZE_LABELS[secondary.place_size] || secondary.place_size}`);
+
+  for (const [key, label] of [...REVIEW_BINARY_FIELDS, ...REVIEW_FOOD_BINARY_FIELDS]) {
+    if (typeof secondary[key] === 'boolean') chips.push(`${label}: ${secondary[key] ? 'Yes' : 'No'}`);
+  }
+
+  return chips.length ? `<div class="chips">${chips.map((text) => `<span class="chip">${escapeHtml(text)}</span>`).join('')}</div>` : '';
 };
 
 const applyTheme = () => {
@@ -518,6 +632,7 @@ const renderBusiness = (b) => {
   renderHoursLocationOptions(b);
   fillHoursFormFromSelectedLocation();
   renderReviewLocationOptions(b);
+  renderReviewSecondaryFields(b);
 };
 
 const renderReviewSummary = (summary, distribution) => {
@@ -590,6 +705,7 @@ const renderReviews = (items) => {
           <span class="chip">Access ${Number(factors.accessibility_friendliness || 0).toFixed(1)}</span>
           <span class="chip">Clean ${Number(factors.cleanliness || 0).toFixed(1)}</span>
         </div>
+        ${renderSecondaryChips(rating.secondary)}
         <div class="review-text">${escapeHtml(r.content || '')}</div>
         <div class="media-grid">${media}</div>
       </article>`;
@@ -689,6 +805,34 @@ if (reviewLocationSelect) {
   });
 }
 
+const reviewWifiSpeed = $('reviewWifiSpeed');
+if (reviewWifiSpeed) {
+  reviewWifiSpeed.addEventListener('input', (e) => {
+    $('reviewWifiSpeedValue').textContent = wifiSpeedLabel(e.target.value);
+  });
+}
+
+const reviewPlaceSize = $('reviewPlaceSize');
+if (reviewPlaceSize) {
+  reviewPlaceSize.addEventListener('input', (e) => {
+    $('reviewPlaceSizeValue').textContent = SIZE_LABELS[SIZE_BY_SLIDER[e.target.value] || 'medium'];
+  });
+}
+
+const handleBinaryToggleClick = (e) => {
+  const group = e.target.closest('[data-binary-field]');
+  const btn = e.target.closest('[data-binary-value]');
+  if (!group || !btn) return;
+  const key = group.dataset.binaryField;
+  const nextValue = btn.dataset.binaryValue === 'yes';
+  state.reviewBinary[key] = state.reviewBinary[key] === nextValue ? undefined : nextValue;
+  renderBinaryFieldGroup(REVIEW_BINARY_FIELDS, 'reviewBinaryFields');
+  renderBinaryFieldGroup(REVIEW_FOOD_BINARY_FIELDS, 'reviewFoodBinaryFields');
+};
+
+$('reviewBinaryFields')?.addEventListener('click', handleBinaryToggleClick);
+$('reviewFoodBinaryFields')?.addEventListener('click', handleBinaryToggleClick);
+
 const reviewFactorsHost = $('reviewFactors');
 if (reviewFactorsHost) {
   reviewFactorsHost.addEventListener('click', (e) => {
@@ -766,14 +910,7 @@ if (reviewForm) {
         headers: authHeaders(),
         body: JSON.stringify({
           factors: state.reviewFactors,
-          secondary: {
-            pricing_value: 4.5,
-            child_care_availability: 2.0,
-            child_friendliness: 3.0,
-            party_size_accommodations: 4.0,
-            accessibility_details_score: 4.0,
-            accessibility_notes: 'Submitted from business page form.'
-          }
+          secondary: readReviewSecondaryPayload()
         })
       });
 
@@ -799,6 +936,10 @@ if (reviewForm) {
 
       if ($('reviewImages')) $('reviewImages').value = '';
       if ($('reviewComment')) $('reviewComment').value = '';
+      if ($('reviewWifiSpeed')) $('reviewWifiSpeed').value = '2.5';
+      if ($('reviewPlaceSize')) $('reviewPlaceSize').value = '2';
+      state.reviewBinary = {};
+      renderReviewSecondaryFields(state.business);
       showToast('ok', files.length ? `Review submitted with ${files.length} image(s).` : 'Review submitted.');
       closeReviewModal();
       state.page = 1;

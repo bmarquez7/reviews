@@ -1,10 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { ApiError } from '../lib/http-errors.js';
+import { stringifySecondaryMeta } from '../lib/secondary-rating.js';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { requirePoliciesAccepted, requireVerifiedUser } from '../lib/auth.js';
 
 const HalfStep = z.number().min(0).max(5).refine((v) => Number.isInteger(v * 2), 'Must be 0..5 in 0.5 steps');
+const PlaceSize = z.enum(['small', 'medium', 'large', 'extra_large']);
 
 const UpsertRatingSchema = z.object({
   factors: z.object({
@@ -23,7 +25,17 @@ const UpsertRatingSchema = z.object({
       child_friendliness: HalfStep.optional(),
       party_size_accommodations: HalfStep.optional(),
       accessibility_details_score: HalfStep.optional(),
-      accessibility_notes: z.string().max(1000).optional()
+      accessibility_notes: z.string().max(1000).optional(),
+      wifi_speed: HalfStep.optional(),
+      place_size: PlaceSize.optional(),
+      kid_friendly: z.boolean().optional(),
+      pet_friendly: z.boolean().optional(),
+      vegan_friendly: z.boolean().optional(),
+      vegetarian_friendly: z.boolean().optional(),
+      halal: z.boolean().optional(),
+      sugar_free_options: z.boolean().optional(),
+      gluten_free_options: z.boolean().optional(),
+      accommodates_allergies: z.boolean().optional()
     })
     .optional()
 });
@@ -101,7 +113,17 @@ export const ratingRoutes: FastifyPluginAsync = async (app) => {
                 child_friendliness: { type: 'number', minimum: 0, maximum: 5, multipleOf: 0.5 },
                 party_size_accommodations: { type: 'number', minimum: 0, maximum: 5, multipleOf: 0.5 },
                 accessibility_details_score: { type: 'number', minimum: 0, maximum: 5, multipleOf: 0.5 },
-                accessibility_notes: { type: 'string', maxLength: 1000 }
+                accessibility_notes: { type: 'string', maxLength: 1000 },
+                wifi_speed: { type: 'number', minimum: 0, maximum: 5, multipleOf: 0.5 },
+                place_size: { type: 'string', enum: ['small', 'medium', 'large', 'extra_large'] },
+                kid_friendly: { type: 'boolean' },
+                pet_friendly: { type: 'boolean' },
+                vegan_friendly: { type: 'boolean' },
+                vegetarian_friendly: { type: 'boolean' },
+                halal: { type: 'boolean' },
+                sugar_free_options: { type: 'boolean' },
+                gluten_free_options: { type: 'boolean' },
+                accommodates_allergies: { type: 'boolean' }
               }
             }
           }
@@ -135,7 +157,24 @@ export const ratingRoutes: FastifyPluginAsync = async (app) => {
       const secondaryRes = await supabaseAdmin.from('secondary_ratings').upsert(
         {
           rating_id: upsertRes.data.id,
-          ...body.secondary
+          pricing_value: body.secondary.pricing_value ?? null,
+          child_care_availability: body.secondary.child_care_availability ?? null,
+          child_friendliness: body.secondary.child_friendliness ?? null,
+          party_size_accommodations: body.secondary.party_size_accommodations ?? null,
+          accessibility_details_score: body.secondary.accessibility_details_score ?? null,
+          accessibility_notes: stringifySecondaryMeta({
+            accessibility_notes: body.secondary.accessibility_notes ?? null,
+            wifi_speed: body.secondary.wifi_speed ?? null,
+            place_size: body.secondary.place_size ?? null,
+            kid_friendly: body.secondary.kid_friendly ?? null,
+            pet_friendly: body.secondary.pet_friendly ?? null,
+            vegan_friendly: body.secondary.vegan_friendly ?? null,
+            vegetarian_friendly: body.secondary.vegetarian_friendly ?? null,
+            halal: body.secondary.halal ?? null,
+            sugar_free_options: body.secondary.sugar_free_options ?? null,
+            gluten_free_options: body.secondary.gluten_free_options ?? null,
+            accommodates_allergies: body.secondary.accommodates_allergies ?? null
+          })
         },
         { onConflict: 'rating_id' }
       );

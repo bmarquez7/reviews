@@ -1049,7 +1049,7 @@ $('ratingForm').addEventListener('submit', async (e) => {
     if (!state.selectedLocation) throw { error: { message: 'Select a location first.' } };
     const comment = $('commentText').value.trim();
     const imageInput = $('commentImages');
-    const rating = await req(`/locations/${state.selectedLocation.id}/ratings/me`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify({ factors: state.factors, secondary: { pricing_value: 4.5, child_care_availability: 2.0, child_friendliness: 3.0, party_size_accommodations: 4.0, accessibility_details_score: 4.0, accessibility_notes: 'Front ramp and accessible restroom.' } }) });
+    const rating = await req(`/locations/${state.selectedLocation.id}/ratings/me`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify({ factors: state.factors }) });
     const posted = await req(`/ratings/${rating.data.rating_id}/comment`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ content: comment, visit_month: 2, visit_year: 2026 }) });
     const uploaded = [];
     const files = Array.from(imageInput?.files || []).slice(0, 6);
