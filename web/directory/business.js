@@ -262,10 +262,50 @@ const openImageLightbox = (url) => {
 };
 
 const closeImageLightbox = () => $('imageLightbox').classList.add('hidden');
-const openReviewModal = () => $('reviewModal')?.classList.remove('hidden');
+const setReviewLoginMessage = (message = '', type = 'err') => {
+  const el = $('reviewLoginState');
+  if (!el) return;
+  if (!message) {
+    el.textContent = '';
+    el.classList.add('hidden');
+    return;
+  }
+  el.textContent = message;
+  el.classList.remove('hidden');
+  el.style.borderColor = type === 'ok' ? '#b9dec6' : '#e1b8b8';
+  el.style.background = type === 'ok' ? '#edf8f1' : '#fff0f0';
+  el.style.color = type === 'ok' ? '#1f6938' : '#8e2020';
+};
+
+const syncReviewAuthGate = () => {
+  const loggedIn = Boolean(state.token);
+  $('reviewAuthGate')?.classList.toggle('hidden', loggedIn);
+  $('reviewComposer')?.classList.toggle('hidden', !loggedIn);
+  if (loggedIn) {
+    $('reviewLoginForm')?.classList.add('hidden');
+    setReviewLoginMessage('');
+  }
+};
+
+const openReviewModal = () => {
+  syncReviewAuthGate();
+  $('reviewModal')?.classList.remove('hidden');
+};
 const closeReviewModal = () => $('reviewModal')?.classList.add('hidden');
 const openClaimModal = () => $('claimModal')?.classList.remove('hidden');
 const closeClaimModal = () => $('claimModal')?.classList.add('hidden');
+
+const performLogin = async (email, password) => {
+  const data = await req('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email: String(email || '').trim(), password: String(password || '') })
+  });
+  state.token = data.data.access_token;
+  localStorage.setItem('dir.token', state.token);
+  await syncAdminLink();
+  syncReviewAuthGate();
+  return data;
+};
 
 const syncAdminLink = async () => {
   const link = $('bizAdminLink');
@@ -280,6 +320,7 @@ const syncAdminLink = async () => {
     if (hoursNote) hoursNote.textContent = 'Claimed owners and admins can edit hours.';
     state.canEditBusiness = false;
     state.canEditHours = false;
+    syncReviewAuthGate();
     return;
   }
   try {
@@ -294,6 +335,7 @@ const syncAdminLink = async () => {
     hoursForm?.classList.toggle('hidden', !canManage);
     if (hoursNote) hoursNote.textContent = canManage ? 'Claimed owners and admins can edit hours.' : 'Login as a claimed owner or admin to edit hours.';
     if (canAccess) link.href = `./admin.html?businessId=${businessId}`;
+    syncReviewAuthGate();
   } catch {
     link.classList.add('hidden');
     panel?.classList.add('hidden');
@@ -301,6 +343,7 @@ const syncAdminLink = async () => {
     if (hoursNote) hoursNote.textContent = 'Claimed owners and admins can edit hours.';
     state.canEditBusiness = false;
     state.canEditHours = false;
+    syncReviewAuthGate();
   }
 };
 
@@ -728,13 +771,7 @@ const loadReviews = async () => {
 $('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
-    const data = await req('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email: $('email').value.trim(), password: $('password').value })
-    });
-    state.token = data.data.access_token;
-    localStorage.setItem('dir.token', state.token);
-    await syncAdminLink();
+    await performLogin($('email').value, $('password').value);
     showToast('ok', 'Logged in');
   } catch (err) {
     showToast('err', errMsg(err));
@@ -745,6 +782,7 @@ $('logout').addEventListener('click', () => {
   state.token = '';
   localStorage.removeItem('dir.token');
   void syncAdminLink();
+  syncReviewAuthGate();
   showToast('ok', 'Logged out');
 });
 
@@ -754,6 +792,23 @@ $('openReviewModal')?.addEventListener('click', () => {
 
 $('openClaimModal')?.addEventListener('click', () => {
   openClaimModal();
+});
+
+$('reviewShowLogin')?.addEventListener('click', () => {
+  $('reviewLoginForm')?.classList.toggle('hidden');
+  setReviewLoginMessage('');
+});
+
+$('reviewLoginForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await performLogin($('reviewLoginEmail')?.value, $('reviewLoginPassword')?.value);
+    if ($('reviewLoginEmail')) $('reviewLoginEmail').value = '';
+    if ($('reviewLoginPassword')) $('reviewLoginPassword').value = '';
+    showToast('ok', 'Logged in');
+  } catch (err) {
+    setReviewLoginMessage(errMsg(err));
+  }
 });
 
 const hoursLocationSelect = $('hoursLocationId');

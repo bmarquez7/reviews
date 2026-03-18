@@ -324,6 +324,13 @@ button:hover { filter: brightness(1.05); }
   padding-top: 0.75rem;
 }
 
+.review-auth-gate {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.8rem;
+  background: #fffaf1;
+}
+
 .secondary-review-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
