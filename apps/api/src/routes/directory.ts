@@ -31,6 +31,8 @@ const buildRatingDistribution = (scores: number[]) => {
   return Array.from(bins.entries()).map(([score, count]) => ({ score, count }));
 };
 
+const MIN_SITE_REVIEWS_FOR_PUBLIC_SCORE = 20;
+
 const withGoogleScoreFallback = (
   score: {
     business_id?: string;
@@ -42,16 +44,31 @@ const withGoogleScoreFallback = (
   } | null | undefined,
   business: { id?: string; name?: string | null; owner_name?: string | null }
 ) => {
-  if (score && Number(score.business_rating_count || 0) > 0) return score;
+  const localCount = Number(score?.business_rating_count || 0);
+  if (score && localCount >= MIN_SITE_REVIEWS_FOR_PUBLIC_SCORE) return score;
   const parsed = lookupGoogleBusinessFallback(business);
-  if (!parsed) return score;
+  if (parsed) {
+    return {
+      business_id: score?.business_id ?? business.id,
+      business_rating_count: parsed.rating_count,
+      weighted_overall_raw: parsed.rating,
+      weighted_overall_display: Math.round(parsed.rating * 2) / 2,
+      unweighted_overall_raw: parsed.rating,
+      unweighted_overall_display: Math.round(parsed.rating * 2) / 2
+    };
+  }
+  if (!score) return score;
+  if (localCount > 0 && localCount < MIN_SITE_REVIEWS_FOR_PUBLIC_SCORE) {
+    return {
+      ...score,
+      weighted_overall_raw: null,
+      weighted_overall_display: null,
+      unweighted_overall_raw: null,
+      unweighted_overall_display: null
+    };
+  }
   return {
-    business_id: score?.business_id ?? business.id,
-    business_rating_count: parsed.rating_count,
-    weighted_overall_raw: parsed.rating,
-    weighted_overall_display: Math.round(parsed.rating * 2) / 2,
-    unweighted_overall_raw: parsed.rating,
-    unweighted_overall_display: Math.round(parsed.rating * 2) / 2
+    ...score
   };
 };
 

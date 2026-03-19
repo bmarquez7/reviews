@@ -60,6 +60,8 @@ const HOURS_DAYS = [
   ['sunday', 'hoursSunday']
 ];
 
+const MIN_SITE_REVIEWS_FOR_PUBLIC_SCORE = 20;
+
 const THEME_DEFAULTS = { brand: '#0f6a4d', bg: '#f5f2eb', card: '#fffdf7', iconUrl: './assets/new-roots-logo.png' };
 
 const params = new URLSearchParams(window.location.search);
@@ -359,64 +361,6 @@ const syncAdminLink = async () => {
   }
 };
 
-const initProfileTabs = () => {
-  const tabHost = $('profileTabs');
-  if (!tabHost) return;
-  const tabs = Array.from(tabHost.querySelectorAll('.tab-btn[data-target]'));
-  const sections = tabs
-    .map((tab) => document.getElementById(tab.dataset.target))
-    .filter(Boolean);
-  if (!tabs.length || !sections.length) return;
-
-  const setActive = (id) => {
-    tabs.forEach((tab) => {
-      const isActive = tab.dataset.target === id;
-      tab.classList.toggle('active', isActive);
-      tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
-    });
-  };
-
-  tabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-      const target = document.getElementById(tab.dataset.target);
-      if (!target) return;
-      const topbar = document.querySelector('.topbar');
-      const tabsCard = document.querySelector('.profile-tabs-card');
-      const offset = (topbar?.offsetHeight || 0) + (tabsCard?.offsetHeight || 0) + 12;
-      const top = window.scrollY + target.getBoundingClientRect().top - offset;
-      window.scrollTo({ top, behavior: 'smooth' });
-      history.replaceState(null, '', `#${target.id}`);
-      setActive(target.id);
-    });
-  });
-
-  const observer = new IntersectionObserver(
-    (entries) => {
-      const visible = entries
-        .filter((entry) => entry.isIntersecting)
-        .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-      if (!visible.length) return;
-      setActive(visible[0].target.id);
-    },
-    {
-      root: null,
-      rootMargin: '-130px 0px -55% 0px',
-      threshold: [0.15, 0.25, 0.5]
-    }
-  );
-
-  sections.forEach((section) => observer.observe(section));
-  const hashId = window.location.hash?.replace('#', '');
-  if (hashId && sections.some((section) => section.id === hashId)) {
-    setActive(hashId);
-    window.setTimeout(() => {
-      document.getElementById(hashId)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    }, 120);
-  } else {
-    setActive(sections[0].id);
-  }
-};
-
 const mapUrlFor = (loc) => {
   const q = encodeURIComponent(`${loc.address_line}, ${loc.city}, ${loc.country}`);
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
@@ -629,8 +573,14 @@ const buildHoursPayloadFromForm = () => {
 const renderBusiness = (b) => {
   state.business = b;
   $('bizPageTitle').textContent = formatDisplayName(b.name) || 'Business';
+  const displayScore = b.scores?.weighted_overall_display;
+  const reviewCount = Number(b.scores?.business_rating_count ?? 0);
+  const scoreMarkup =
+    displayScore == null || Number.isNaN(Number(displayScore))
+      ? `<div class="row gap-sm center"><strong>Public score pending</strong>${reviewCount ? ` <span class="muted">(${reviewCount} review${reviewCount === 1 ? '' : 's'} on file)</span>` : ''}</div>`
+      : `<div class="row gap-sm center">${logoRatingMarkup(displayScore)}<strong>${formatScoreText(displayScore)} / 5</strong> <span class="muted">(${reviewCount} reviews)</span></div>`;
   $('bizHeaderMeta').innerHTML = `
-    <div class="row gap-sm center">${logoRatingMarkup(b.scores?.weighted_overall_display)}<strong>${formatScoreText(b.scores?.weighted_overall_display)} / 5</strong> <span class="muted">(${Number(b.scores?.business_rating_count ?? 0)} reviews)</span></div>
+    ${scoreMarkup}
     <div class="muted">${b.is_claimed ? 'Claimed' : 'Unclaimed'} • ${escapeHtml(b.categories?.map((c) => c.categories?.slug || c.slug || '').filter(Boolean).join(', ') || 'General')}</div>
   `;
 
@@ -694,6 +644,19 @@ const renderReviewSummary = (summary, distribution) => {
   if (!summary) {
     $('ratingSummary').innerHTML = '<span class="muted">No ratings yet.</span>';
     $('ratingDistribution').innerHTML = '';
+    return;
+  }
+
+  const siteReviewCount = Number(summary.rating_count || 0);
+  if (siteReviewCount < MIN_SITE_REVIEWS_FOR_PUBLIC_SCORE) {
+    const remaining = MIN_SITE_REVIEWS_FOR_PUBLIC_SCORE - siteReviewCount;
+    $('ratingSummary').innerHTML = [
+      `<span class="chip">Site reviews: ${siteReviewCount}</span>`,
+      `<span class="chip">Public site score starts at ${MIN_SITE_REVIEWS_FOR_PUBLIC_SCORE} reviews</span>`,
+      `<span class="chip">${remaining} more needed before the live site score appears</span>`
+    ].join('');
+    $('ratingDistribution').innerHTML =
+      '<span class="muted">Reviews posted on this site appear below immediately. The site-generated score stays hidden until there is a stronger sample size.</span>';
     return;
   }
 
@@ -1199,7 +1162,6 @@ window.addEventListener('beforeunload', () => {
   installEmbedResize();
   applyTheme();
   renderReviewFactors();
-  initProfileTabs();
   if (!businessId) {
     $('bizHeaderMeta').textContent = 'Missing businessId in URL.';
     return;

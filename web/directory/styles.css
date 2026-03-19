@@ -327,11 +327,19 @@ button:hover { filter: brightness(1.05); }
 .overlay {
   position: fixed;
   inset: 0;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  min-height: 100dvh;
+  height: 100dvh;
   background: rgba(16, 20, 28, 0.65);
   z-index: 2000;
   display: grid;
   place-items: center;
+  align-items: center;
+  justify-items: center;
   padding: 1rem;
+  overflow: auto;
 }
 
 .overlay-card {
@@ -342,16 +350,25 @@ button:hover { filter: brightness(1.05); }
   background: #fff;
   border: 1px solid #dce3ef;
   padding: 1rem;
+  margin: auto;
 }
 
 .page-loading-overlay {
   position: fixed;
   inset: 0;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  min-height: 100dvh;
+  height: 100dvh;
   z-index: 2500;
   background: rgba(245, 244, 247, 0.88);
   display: grid;
   place-items: center;
+  align-items: center;
+  justify-items: center;
   padding: 1rem;
+  overflow: hidden;
 }
 
 .page-loading-card {
@@ -608,36 +625,6 @@ select {
   aspect-ratio: 4 / 3;
 }
 
-.profile-tabs-card {
-  grid-column: span 12;
-  position: sticky;
-  top: 66px;
-  z-index: 9;
-  padding: 0.55rem;
-}
-
-.profile-tabs {
-  display: flex;
-  gap: 0.45rem;
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-
-.tab-btn {
-  background: #fff;
-  color: #2d3645;
-  border: 1px solid #d5dbe7;
-  border-radius: 999px;
-  white-space: nowrap;
-  min-width: 100px;
-}
-
-.tab-btn.active {
-  background: linear-gradient(180deg, var(--brand-2), var(--brand));
-  color: var(--ink);
-  border-color: transparent;
-}
-
 .section-anchor {
   scroll-margin-top: 150px;
 }
@@ -742,5 +729,28 @@ select {
     grid-column: span 12;
     aspect-ratio: auto;
     overflow: visible;
+  }
+
+  .overlay,
+  .page-loading-overlay {
+    padding:
+      max(0.85rem, env(safe-area-inset-top))
+      max(0.85rem, env(safe-area-inset-right))
+      max(0.85rem, env(safe-area-inset-bottom))
+      max(0.85rem, env(safe-area-inset-left));
+  }
+
+  .overlay-card {
+    width: min(100%, 100vw - 1.7rem);
+    max-height: calc(100dvh - 1.7rem);
+  }
+
+  .image-card {
+    width: min(100%, 100vw - 1.7rem);
+  }
+
+  .page-loading-logo {
+    width: 96px;
+    height: 96px;
   }
 }

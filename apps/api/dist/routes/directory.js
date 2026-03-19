@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { ApiError } from '../lib/http-errors.js';
+import { lookupGoogleBusinessFallback } from '../lib/google-place-fallbacks.js';
+import { BUSINESS_MEDIA_BUCKET, REVIEW_MEDIA_BUCKET, ensureMediaBucket, listPublicMedia, listPublicMediaBatch } from '../lib/media.js';
+import { parseSecondaryMeta } from '../lib/secondary-rating.js';
 import { supabaseAdmin } from '../lib/supabase.js';
 const listBusinessesQuerySchema = z.object({
     q: z.string().optional(),
@@ -22,8 +25,50 @@ const buildRatingDistribution = (scores) => {
     }
     return Array.from(bins.entries()).map(([score, count]) => ({ score, count }));
 };
+const MIN_SITE_REVIEWS_FOR_PUBLIC_SCORE = 20;
+const withGoogleScoreFallback = (score, business) => {
+    const localCount = Number(score?.business_rating_count || 0);
+    if (score && localCount >= MIN_SITE_REVIEWS_FOR_PUBLIC_SCORE)
+        return score;
+    const parsed = lookupGoogleBusinessFallback(business);
+    if (parsed) {
+        return {
+            business_id: score?.business_id ?? business.id,
+            business_rating_count: parsed.rating_count,
+            weighted_overall_raw: parsed.rating,
+            weighted_overall_display: Math.round(parsed.rating * 2) / 2,
+            unweighted_overall_raw: parsed.rating,
+            unweighted_overall_display: Math.round(parsed.rating * 2) / 2
+        };
+    }
+    if (!score)
+        return score;
+    if (localCount > 0 && localCount < MIN_SITE_REVIEWS_FOR_PUBLIC_SCORE) {
+        return {
+            ...score,
+            weighted_overall_raw: null,
+            weighted_overall_display: null,
+            unweighted_overall_raw: null,
+            unweighted_overall_display: null
+        };
+    }
+    return {
+        ...score
+    };
+};
 export const directoryRoutes = async (app) => {
-    app.get('/categories', async () => {
+    try {
+        await Promise.all([ensureMediaBucket(BUSINESS_MEDIA_BUCKET), ensureMediaBucket(REVIEW_MEDIA_BUCKET)]);
+    }
+    catch (err) {
+        app.log.warn({ err }, 'Media bucket bootstrap failed; continuing without startup bucket check');
+    }
+    app.get('/categories', {
+        schema: {
+            summary: 'List categories',
+            tags: ['Directory']
+        }
+    }, async () => {
         const categories = await supabaseAdmin
             .from('categories')
             .select('id,slug,label_i18n_key')
@@ -34,13 +79,31 @@ export const directoryRoutes = async (app) => {
         }
         return { data: categories.data ?? [] };
     });
-    app.get('/businesses', async (request) => {
+    app.get('/businesses', {
+        schema: {
+            summary: 'List businesses',
+            tags: ['Directory'],
+            querystring: {
+                type: 'object',
+                properties: {
+                    q: { type: 'string' },
+                    category: { type: 'string', format: 'uuid' },
+                    country: { type: 'string' },
+                    region: { type: 'string' },
+                    city: { type: 'string' },
+                    sort: { type: 'string', enum: ['top_rated', 'most_reviewed', 'newest', 'name'] },
+                    page: { type: 'integer', minimum: 1 },
+                    page_size: { type: 'integer', minimum: 1, maximum: 100 }
+                }
+            }
+        }
+    }, async (request) => {
         const query = listBusinessesQuerySchema.parse(request.query);
         const from = (query.page - 1) * query.page_size;
         const to = from + query.page_size - 1;
         let q = supabaseAdmin
             .from('businesses')
-            .select('id,name,created_at,status', { count: 'exact' })
+            .select('id,name,owner_name,created_at,status', { count: 'exact' })
             .eq('status', 'active');
         if (query.q)
             q = q.ilike('name', `%${query.q}%`);
@@ -63,7 +126,7 @@ export const directoryRoutes = async (app) => {
         if (res.error)
             throw new ApiError(500, 'INTERNAL_ERROR', res.error.message);
         const businessIds = (res.data ?? []).map((b) => b.id);
-        const [scoreRes, categoryRes, locationRes] = await Promise.all([
+        const [scoreRes, categoryRes, locationRes, businessMedia] = await Promise.all([
             businessIds.length
                 ? supabaseAdmin
                     .from('business_score_summary')
@@ -78,7 +141,10 @@ export const directoryRoutes = async (app) => {
                 : Promise.resolve({ data: [], error: null }),
             businessIds.length
                 ? supabaseAdmin.from('business_locations').select('id,business_id,country,region,city,status').in('business_id', businessIds)
-                : Promise.resolve({ data: [], error: null })
+                : Promise.resolve({ data: [], error: null }),
+            businessIds.length
+                ? listPublicMediaBatch(BUSINESS_MEDIA_BUCKET, businessIds.map((businessId) => `business/${businessId}/`), 1)
+                : Promise.resolve(new Map())
         ]);
         if (scoreRes.error || categoryRes.error || locationRes.error) {
             throw new ApiError(500, 'INTERNAL_ERROR', scoreRes.error?.message ?? categoryRes.error?.message ?? locationRes.error?.message ?? 'Lookup failed');
@@ -114,12 +180,13 @@ export const directoryRoutes = async (app) => {
             return true;
         });
         const items = filteredItems.map((business) => {
-            const score = scoresByBusiness.get(business.id);
+            const score = withGoogleScoreFallback(scoresByBusiness.get(business.id), business);
             return {
                 id: business.id,
                 name: business.name,
                 categories: categoriesByBusiness.get(business.id) ?? [],
                 locations_count: (locationByBusiness.get(business.id) ?? []).length,
+                media_urls: businessMedia.get(`business/${business.id}/`) ?? [],
                 scores: {
                     weighted_overall_display: score?.weighted_overall_display ?? null,
                     weighted_overall_raw: score?.weighted_overall_raw ?? null,
@@ -144,7 +211,19 @@ export const directoryRoutes = async (app) => {
             }
         };
     });
-    app.get('/businesses/:businessId', async (request) => {
+    app.get('/businesses/:businessId', {
+        schema: {
+            summary: 'Get business profile',
+            tags: ['Directory'],
+            params: {
+                type: 'object',
+                required: ['businessId'],
+                properties: {
+                    businessId: { type: 'string', format: 'uuid' }
+                }
+            }
+        }
+    }, async (request) => {
         const params = z.object({ businessId: z.string().uuid() }).parse(request.params);
         const [businessRes, locationRes, scoreRes, categoryRes] = await Promise.all([
             supabaseAdmin.from('businesses').select('*').eq('id', params.businessId).eq('status', 'active').single(),
@@ -166,16 +245,244 @@ export const directoryRoutes = async (app) => {
         if (locationRes.error || scoreRes.error || categoryRes.error) {
             throw new ApiError(500, 'INTERNAL_ERROR', locationRes.error?.message ?? scoreRes.error?.message ?? categoryRes.error?.message ?? 'Lookup failed');
         }
+        const mediaUrls = await listPublicMedia(BUSINESS_MEDIA_BUCKET, `business/${params.businessId}/`, 12);
+        const resolvedScore = withGoogleScoreFallback(scoreRes.data ?? null, businessRes.data);
         return {
             data: {
                 ...businessRes.data,
                 categories: categoryRes.data ?? [],
-                scores: scoreRes.data ?? null,
-                locations: locationRes.data ?? []
+                scores: resolvedScore ?? null,
+                locations: locationRes.data ?? [],
+                media_urls: mediaUrls
             }
         };
     });
-    app.get('/locations/:locationId', async (request) => {
+    app.get('/businesses/:businessId/reviews', {
+        schema: {
+            summary: 'Get business-level reviews with factor breakdown and reviewer profile',
+            tags: ['Directory'],
+            params: {
+                type: 'object',
+                required: ['businessId'],
+                properties: {
+                    businessId: { type: 'string', format: 'uuid' }
+                }
+            },
+            querystring: {
+                type: 'object',
+                properties: {
+                    page: { type: 'integer', minimum: 1 },
+                    page_size: { type: 'integer', minimum: 1, maximum: 50 }
+                }
+            }
+        }
+    }, async (request) => {
+        const params = z.object({ businessId: z.string().uuid() }).parse(request.params);
+        const query = z
+            .object({
+            page: z.coerce.number().int().min(1).default(1),
+            page_size: z.coerce.number().int().min(1).max(50).default(10)
+        })
+            .parse(request.query);
+        const from = (query.page - 1) * query.page_size;
+        const to = from + query.page_size - 1;
+        const locationRes = await supabaseAdmin
+            .from('business_locations')
+            .select('id')
+            .eq('business_id', params.businessId)
+            .eq('status', 'active');
+        if (locationRes.error) {
+            throw new ApiError(500, 'INTERNAL_ERROR', locationRes.error.message);
+        }
+        const locationIds = (locationRes.data ?? []).map((row) => row.id);
+        if (!locationIds.length) {
+            return {
+                data: {
+                    items: [],
+                    summary: null,
+                    rating_distribution: buildRatingDistribution([]),
+                    page: query.page,
+                    page_size: query.page_size,
+                    total: 0
+                }
+            };
+        }
+        const commentsRes = await supabaseAdmin
+            .from('comments')
+            .select('id,rating_id,user_id,location_id,content,visit_month,visit_year,created_at,status', { count: 'exact' })
+            .in('location_id', locationIds)
+            .eq('status', 'approved')
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+            .range(from, to);
+        const ratingsForSummaryRes = await supabaseAdmin
+            .from('ratings')
+            .select('id,overall_score,pricing_transparency,friendliness,lgbtq_acceptance,racial_tolerance,religious_tolerance,accessibility_friendliness,cleanliness')
+            .in('location_id', locationIds)
+            .eq('status', 'approved');
+        if (commentsRes.error || ratingsForSummaryRes.error) {
+            throw new ApiError(500, 'INTERNAL_ERROR', commentsRes.error?.message ?? ratingsForSummaryRes.error?.message ?? 'Lookup failed');
+        }
+        const ratingIds = Array.from(new Set((commentsRes.data ?? []).map((row) => row.rating_id)));
+        const userIds = Array.from(new Set((commentsRes.data ?? []).map((row) => row.user_id)));
+        const commentIds = (commentsRes.data ?? []).map((row) => row.id);
+        const [ratingsRes, secondaryRes, profilesRes, repliesRes] = await Promise.all([
+            ratingIds.length
+                ? supabaseAdmin
+                    .from('ratings')
+                    .select('id,overall_score,pricing_transparency,friendliness,lgbtq_acceptance,racial_tolerance,religious_tolerance,accessibility_friendliness,cleanliness')
+                    .in('id', ratingIds)
+                : Promise.resolve({ data: [], error: null }),
+            ratingIds.length
+                ? supabaseAdmin
+                    .from('secondary_ratings')
+                    .select('rating_id,pricing_value,child_care_availability,child_friendliness,party_size_accommodations,accessibility_details_score,accessibility_notes')
+                    .in('rating_id', ratingIds)
+                : Promise.resolve({ data: [], error: null }),
+            userIds.length
+                ? supabaseAdmin
+                    .from('user_profiles')
+                    .select('user_id,screen_name,country_of_origin,age_public,age_range_public,profile_image_url')
+                    .in('user_id', userIds)
+                : Promise.resolve({ data: [], error: null }),
+            commentIds.length
+                ? supabaseAdmin
+                    .from('business_replies')
+                    .select('id,comment_id,business_id,content,created_at,status')
+                    .in('comment_id', commentIds)
+                    .eq('status', 'approved')
+                    .is('deleted_at', null)
+                : Promise.resolve({ data: [], error: null })
+        ]);
+        if (ratingsRes.error || secondaryRes.error || profilesRes.error || repliesRes.error) {
+            throw new ApiError(500, 'INTERNAL_ERROR', ratingsRes.error?.message ??
+                secondaryRes.error?.message ??
+                profilesRes.error?.message ??
+                repliesRes.error?.message ??
+                'Lookup failed');
+        }
+        const ratingsById = new Map((ratingsRes.data ?? []).map((row) => [row.id, row]));
+        const secondaryByRatingId = new Map((secondaryRes.data ?? []).map((row) => [row.rating_id, row]));
+        const profilesByUserId = new Map((profilesRes.data ?? []).map((row) => [row.user_id, row]));
+        const repliesByComment = new Map();
+        for (const reply of repliesRes.data ?? []) {
+            const current = repliesByComment.get(reply.comment_id) ?? [];
+            current.push(reply);
+            repliesByComment.set(reply.comment_id, current);
+        }
+        const overallScores = (ratingsForSummaryRes.data ?? []).map((row) => Number(row.overall_score));
+        const avg = (field) => {
+            const values = (ratingsForSummaryRes.data ?? [])
+                .map((row) => Number(row[field]))
+                .filter((v) => Number.isFinite(v));
+            if (!values.length)
+                return null;
+            return values.reduce((sum, v) => sum + v, 0) / values.length;
+        };
+        const summary = (ratingsForSummaryRes.data ?? []).length
+            ? {
+                rating_count: (ratingsForSummaryRes.data ?? []).length,
+                overall_raw: overallScores.reduce((sum, v) => sum + v, 0) / overallScores.length,
+                overall_display: Math.round((overallScores.reduce((sum, v) => sum + v, 0) / overallScores.length) * 2) / 2,
+                factors: {
+                    pricing_transparency: avg('pricing_transparency'),
+                    friendliness: avg('friendliness'),
+                    lgbtq_acceptance: avg('lgbtq_acceptance'),
+                    racial_tolerance: avg('racial_tolerance'),
+                    religious_tolerance: avg('religious_tolerance'),
+                    accessibility_friendliness: avg('accessibility_friendliness'),
+                    cleanliness: avg('cleanliness')
+                }
+            }
+            : null;
+        const commentMedia = await listPublicMediaBatch(REVIEW_MEDIA_BUCKET, (commentsRes.data ?? []).map((comment) => `comment/${comment.id}/`), 6);
+        const items = (commentsRes.data ?? []).map((comment) => {
+            const rating = ratingsById.get(comment.rating_id);
+            const secondary = secondaryByRatingId.get(comment.rating_id);
+            const secondaryMeta = parseSecondaryMeta(secondary?.accessibility_notes);
+            const profile = profilesByUserId.get(comment.user_id);
+            return {
+                ...comment,
+                media_urls: commentMedia.get(`comment/${comment.id}/`) ?? [],
+                rating: rating
+                    ? {
+                        overall_score_raw: Number(rating.overall_score),
+                        overall_score_display: Math.round(Number(rating.overall_score) * 2) / 2,
+                        factors: {
+                            pricing_transparency: Number(rating.pricing_transparency),
+                            friendliness: Number(rating.friendliness),
+                            lgbtq_acceptance: Number(rating.lgbtq_acceptance),
+                            racial_tolerance: Number(rating.racial_tolerance),
+                            religious_tolerance: Number(rating.religious_tolerance),
+                            accessibility_friendliness: Number(rating.accessibility_friendliness),
+                            cleanliness: Number(rating.cleanliness)
+                        },
+                        secondary: secondary
+                            ? {
+                                pricing_value: secondary.pricing_value == null ? null : Number(secondary.pricing_value),
+                                child_care_availability: secondary.child_care_availability == null ? null : Number(secondary.child_care_availability),
+                                child_friendliness: secondary.child_friendliness == null ? null : Number(secondary.child_friendliness),
+                                party_size_accommodations: secondary.party_size_accommodations == null ? null : Number(secondary.party_size_accommodations),
+                                accessibility_details_score: secondary.accessibility_details_score == null
+                                    ? null
+                                    : Number(secondary.accessibility_details_score),
+                                accessibility_notes: secondaryMeta.accessibility_notes ?? null,
+                                wifi_speed: secondaryMeta.wifi_speed ?? null,
+                                place_size: secondaryMeta.place_size ?? null,
+                                kid_friendly: secondaryMeta.kid_friendly ?? null,
+                                pet_friendly: secondaryMeta.pet_friendly ?? null,
+                                vegan_friendly: secondaryMeta.vegan_friendly ?? null,
+                                vegetarian_friendly: secondaryMeta.vegetarian_friendly ?? null,
+                                halal: secondaryMeta.halal ?? null,
+                                sugar_free_options: secondaryMeta.sugar_free_options ?? null,
+                                gluten_free_options: secondaryMeta.gluten_free_options ?? null,
+                                accommodates_allergies: secondaryMeta.accommodates_allergies ?? null
+                            }
+                            : null
+                    }
+                    : null,
+                reviewer: profile
+                    ? {
+                        screen_name: profile.screen_name,
+                        country_of_origin: profile.country_of_origin,
+                        age_range_public: profile.age_public ? profile.age_range_public : null,
+                        profile_image_url: profile.profile_image_url
+                    }
+                    : null,
+                business_replies: repliesByComment.get(comment.id) ?? []
+            };
+        });
+        return {
+            data: {
+                items,
+                summary,
+                rating_distribution: buildRatingDistribution(overallScores),
+                page: query.page,
+                page_size: query.page_size,
+                total: commentsRes.count ?? 0
+            }
+        };
+    });
+    app.get('/locations/:locationId', {
+        schema: {
+            summary: 'Get location profile with scores and comments',
+            tags: ['Directory'],
+            params: {
+                type: 'object',
+                required: ['locationId'],
+                properties: {
+                    locationId: { type: 'string', format: 'uuid' }
+                }
+            },
+            querystring: {
+                type: 'object',
+                properties: {
+                    page: { type: 'integer', minimum: 1 },
+                    page_size: { type: 'integer', minimum: 1, maximum: 50 }
+                }
+            }
+        }
+    }, async (request) => {
         const params = z.object({ locationId: z.string().uuid() }).parse(request.params);
         const query = z
             .object({
@@ -227,15 +534,18 @@ export const directoryRoutes = async (app) => {
             repliesByComment.set(reply.comment_id, current);
         }
         const ratingDistribution = buildRatingDistribution((ratingsRes.data ?? []).map((row) => Number(row.overall_score)));
+        const commentMedia = await listPublicMediaBatch(REVIEW_MEDIA_BUCKET, (commentsRes.data ?? []).map((comment) => `comment/${comment.id}/`), 6);
+        const commentsWithMedia = (commentsRes.data ?? []).map((comment) => ({
+            ...comment,
+            media_urls: commentMedia.get(`comment/${comment.id}/`) ?? [],
+            business_replies: repliesByComment.get(comment.id) ?? []
+        }));
         return {
             data: {
                 location: locationRes.data,
                 scores: scoreRes.data,
                 rating_distribution: ratingDistribution,
-                comments: (commentsRes.data ?? []).map((comment) => ({
-                    ...comment,
-                    business_replies: repliesByComment.get(comment.id) ?? []
-                })),
+                comments: commentsWithMedia,
                 page: query.page,
                 page_size: query.page_size,
                 total_comments: commentsRes.count ?? 0
