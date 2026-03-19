@@ -119,8 +119,8 @@ button:hover { filter: brightness(1.05); }
 .item-sub { color: var(--muted); font-size: 0.9rem; }
 .muted { color: var(--muted); }
 
-.featured-grid {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+.list.featured-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .featured-card {
@@ -439,12 +439,21 @@ button:hover { filter: brightness(1.05); }
 .toast.ok { background: #0f6a4d; }
 .toast.err { background: #a02626; }
 
+@media (max-width: 1200px) {
+  .list.featured-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
 @media (max-width: 920px) {
   .auth-card, .directory-card, .business-card, .location-card, .rating-card, .tools-card, .theme-card { grid-column: span 12; }
   .topbar { flex-direction: column; align-items: stretch; }
   .api-base-wrap { flex-wrap: wrap; }
   .api-base-wrap input { min-width: 0; width: 100%; }
+  .list.featured-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .featured-card-media { aspect-ratio: 4 / 5; }
+}
+
+@media (max-width: 680px) {
+  .list.featured-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .review-toolbar {
   margin-top: 0.6rem;
