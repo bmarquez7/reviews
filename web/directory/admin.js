@@ -3,9 +3,11 @@ import {
   escapeAttr,
   escapeHtml,
   formatDisplayName,
+  hidePageLoading,
   installEmbedResize,
   resolveApiBase,
   safeJsonText,
+  showPageLoading,
   saveApiBasePreference
 } from './shared/client.js';
 
@@ -35,26 +37,36 @@ const showToast = (type, message) => {
 };
 
 const req = async (path, options = {}) => {
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
-    ...(options.headers || {})
-  };
-  const res = await fetch(`${state.apiBase}${path}`, { ...options, headers });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw json;
-  return json;
+  showPageLoading();
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
+      ...(options.headers || {})
+    };
+    const res = await fetch(`${state.apiBase}${path}`, { ...options, headers });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw json;
+    return json;
+  } finally {
+    hidePageLoading();
+  }
 };
 
 const reqForm = async (path, formData) => {
-  const res = await fetch(`${state.apiBase}${path}`, {
-    method: 'POST',
-    body: formData,
-    headers: state.token ? { Authorization: `Bearer ${state.token}` } : {}
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw json;
-  return json;
+  showPageLoading();
+  try {
+    const res = await fetch(`${state.apiBase}${path}`, {
+      method: 'POST',
+      body: formData,
+      headers: state.token ? { Authorization: `Bearer ${state.token}` } : {}
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw json;
+    return json;
+  } finally {
+    hidePageLoading();
+  }
 };
 
 const tierRank = (tier) => (tier === 'owner' ? 3 : tier === 'super_admin' ? 2 : tier === 'admin' ? 1 : 0);

@@ -344,6 +344,42 @@ button:hover { filter: brightness(1.05); }
   padding: 1rem;
 }
 
+.page-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  background: rgba(245, 244, 247, 0.88);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.page-loading-card {
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+}
+
+.page-loading-logo {
+  width: 112px;
+  height: 112px;
+  object-fit: contain;
+  animation: page-loading-spin 1.4s linear infinite;
+}
+
+.page-loading-text {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+
+@keyframes page-loading-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .overlay-body {
   margin-top: 0.6rem;
 }

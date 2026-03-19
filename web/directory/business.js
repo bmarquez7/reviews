@@ -2,9 +2,11 @@ import {
   escapeAttr,
   escapeHtml,
   formatDisplayName,
+  hidePageLoading,
   installEmbedResize,
   resolveApiBase,
   safeJsonText,
+  showPageLoading,
   safeUrl
 } from './shared/client.js';
 
@@ -101,24 +103,34 @@ const showToast = (type, message) => {
 };
 
 const req = async (path, options = {}) => {
-  const res = await fetch(`${apiBase}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw json;
-  return json;
+  showPageLoading();
+  try {
+    const res = await fetch(`${apiBase}${path}`, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw json;
+    return json;
+  } finally {
+    hidePageLoading();
+  }
 };
 
 const reqForm = async (path, formData, options = {}) => {
-  const res = await fetch(`${apiBase}${path}`, {
-    ...options,
-    body: formData,
-    headers: { ...(options.headers || {}) }
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw json;
-  return json;
+  showPageLoading();
+  try {
+    const res = await fetch(`${apiBase}${path}`, {
+      ...options,
+      body: formData,
+      headers: { ...(options.headers || {}) }
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw json;
+    return json;
+  } finally {
+    hidePageLoading();
+  }
 };
 
 const logoRatingMarkup = (score) => {

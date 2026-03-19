@@ -3,8 +3,10 @@ import {
   escapeAttr,
   escapeHtml,
   formatDisplayName,
+  hidePageLoading,
   installEmbedResize,
   resolveApiBase,
+  showPageLoading,
   safeUrl,
   saveApiBasePreference
 } from './shared/client.js';
@@ -218,13 +220,18 @@ const openImageLightbox = (url) => {
 };
 
 const req = async (path, options = {}) => {
-  const res = await fetch(`${state.apiBase}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw json;
-  return json;
+  showPageLoading();
+  try {
+    const res = await fetch(`${state.apiBase}${path}`, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw json;
+    return json;
+  } finally {
+    hidePageLoading();
+  }
 };
 
 const formatScoreText = (value) => {
@@ -233,13 +240,18 @@ const formatScoreText = (value) => {
 };
 
 const reqForm = async (path, formData, options = {}) => {
-  const res = await fetch(`${state.apiBase}${path}`, {
-    ...options,
-    body: formData
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw json;
-  return json;
+  showPageLoading();
+  try {
+    const res = await fetch(`${state.apiBase}${path}`, {
+      ...options,
+      body: formData
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw json;
+    return json;
+  } finally {
+    hidePageLoading();
+  }
 };
 
 const applyTheme = (theme) => {

@@ -202,3 +202,49 @@ export const installEmbedResize = () => {
     mutationObserver?.disconnect();
   };
 };
+
+let loadingDepth = 0;
+let loadingTimer = null;
+
+const ensureLoadingOverlay = () => {
+  let root = document.getElementById('pageLoadingOverlay');
+  if (root) return root;
+
+  root = document.createElement('div');
+  root.id = 'pageLoadingOverlay';
+  root.className = 'page-loading-overlay hidden';
+  root.innerHTML = `
+    <div class="page-loading-card" role="status" aria-live="polite" aria-label="Loading">
+      <img class="page-loading-logo" src="./assets/new-roots-logo.png" alt="New Roots Albania" />
+      <div class="page-loading-text">Loading</div>
+    </div>
+  `;
+  document.body.appendChild(root);
+  return root;
+};
+
+export const showPageLoading = (message = 'Loading') => {
+  const root = ensureLoadingOverlay();
+  const text = root.querySelector('.page-loading-text');
+  if (text) text.textContent = message;
+  loadingDepth += 1;
+
+  if (loadingTimer || !root.classList.contains('hidden')) return;
+  loadingTimer = window.setTimeout(() => {
+    loadingTimer = null;
+    if (loadingDepth > 0) root.classList.remove('hidden');
+  }, 120);
+};
+
+export const hidePageLoading = () => {
+  loadingDepth = Math.max(0, loadingDepth - 1);
+  if (loadingDepth > 0) return;
+
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer);
+    loadingTimer = null;
+  }
+
+  const root = document.getElementById('pageLoadingOverlay');
+  if (root) root.classList.add('hidden');
+};
