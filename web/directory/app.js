@@ -25,15 +25,21 @@ const FACTORS = [
 
 const THEME_DEFAULTS = { brand: '#0f6a4d', bg: '#f5f2eb', card: '#fffdf7', iconUrl: './assets/new-roots-logo.png' };
 const isEmbedMode = document.body.classList.contains('embed-mode');
+const isEmbeddedFrame = isEmbedMode && window.parent !== window;
+const pageParams = new URLSearchParams(window.location.search);
+const initialSearch = pageParams.get('q')?.trim() || '';
+const initialCategoryId = pageParams.get('category')?.trim() || null;
+const initialAlphaParam = pageParams.get('alpha')?.trim().toUpperCase() || '';
+const initialAlpha = /^[A-Z]$/.test(initialAlphaParam) ? initialAlphaParam : null;
 
 const state = {
-  selectedCategoryId: null,
+  selectedCategoryId: initialCategoryId,
   businessPage: 1,
   businessPageSize: 24,
   businessTotal: 0,
   businessSearchDebounce: null,
   suggestionDebounce: null,
-  alphaFilter: null,
+  alphaFilter: initialAlpha,
   authPending: false,
   reviewSort: "newest",
   reviewFilter: "all",
@@ -56,12 +62,49 @@ const state = {
 };
 
 if ($('apiBase')) $('apiBase').value = state.apiBase;
+if ($('businessSearch') && initialSearch) $('businessSearch').value = initialSearch;
 
 const setOut = (id, value) => { $(id).textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); };
 const errMsg = (err) => err?.error?.message || 'Request failed';
 const authHeaders = () => (state.token ? { Authorization: `Bearer ${state.token}` } : {});
 
 const sanitizeImageUrl = (value) => safeUrl(value, { allowHttp: true, allowHttps: true });
+
+const buildStandaloneUrl = (path, searchParams = {}) => {
+  const url = new URL(path, window.location.href);
+  Object.entries(searchParams).forEach(([key, value]) => {
+    if (value == null || value === '') return;
+    url.searchParams.set(key, String(value));
+  });
+  return url.toString();
+};
+
+const navigateToStandalone = (url) => {
+  try {
+    if (window.top && window.top !== window) {
+      window.top.location.href = url;
+      return;
+    }
+  } catch {}
+  window.location.href = url;
+};
+
+const launchStandaloneDirectory = ({ force = false } = {}) => {
+  if (!isEmbeddedFrame) return false;
+  const q = $('businessSearch')?.value.trim() || '';
+  const category = state.selectedCategoryId || '';
+  const alpha = q ? '' : (state.alphaFilter || '');
+  if (!force && !q && !category && !alpha) return false;
+  localStorage.setItem('dir.apiBase', state.apiBase);
+  navigateToStandalone(buildStandaloneUrl('./embed.html', { q, category, alpha }));
+  return true;
+};
+
+const launchStandaloneBusiness = (businessId) => {
+  if (!businessId) return;
+  localStorage.setItem('dir.apiBase', state.apiBase);
+  navigateToStandalone(buildStandaloneUrl('./business.html', { businessId }));
+};
 
 const featuredCardMarkup = (business) => {
   const photo = sanitizeImageUrl((business?.media_urls || [])[0]);
@@ -909,6 +952,8 @@ $('businessSearch').addEventListener('input', () => {
     loadSearchSuggestions().catch(() => {});
   }, 180);
 
+  if (isEmbeddedFrame) return;
+
   if (state.businessSearchDebounce) clearTimeout(state.businessSearchDebounce);
   const search = $('businessSearch').value.trim();
   const canBrowse = !!search || !!state.selectedCategoryId || !!state.alphaFilter || !isEmbedMode;
@@ -931,6 +976,7 @@ $('businessSearch').addEventListener('input', () => {
 $('businessSearch').addEventListener('keydown', async (e) => {
   if (e.key !== 'Enter') return;
   e.preventDefault();
+  if (launchStandaloneDirectory({ force: true })) return;
   try {
     state.businessPage = 1;
     await loadBusinesses();
@@ -942,6 +988,7 @@ const categorySelect = $('categorySelect');
 if (categorySelect) {
   categorySelect.addEventListener('change', async (e) => {
     state.selectedCategoryId = e.target.value || null;
+    if (launchStandaloneDirectory()) return;
     state.businessPage = 1;
     renderCategoryChips();
     try {
@@ -959,6 +1006,7 @@ if (categoryChips) {
     if (!chip) return;
     const clickedId = chip.dataset.categoryId;
     state.selectedCategoryId = state.selectedCategoryId === clickedId ? null : clickedId;
+    if (launchStandaloneDirectory()) return;
     state.businessPage = 1;
     renderCategoryChips();
     try {
@@ -974,6 +1022,7 @@ if (alphaHost) {
     const chip = e.target.closest('[data-alpha]');
     if (!chip) return;
     state.alphaFilter = chip.dataset.alpha === 'all' ? null : chip.dataset.alpha;
+    if (launchStandaloneDirectory()) return;
     state.businessPage = 1;
     renderAlphaChips();
     try {
@@ -1021,6 +1070,10 @@ $('reviewsNext').addEventListener('click', () => {
 $('businessesList').addEventListener('click', async (e) => {
   const card = e.target.closest('[data-business-id]');
   if (!card) return;
+  if (isEmbeddedFrame) {
+    launchStandaloneBusiness(card.dataset.businessId);
+    return;
+  }
   localStorage.setItem('dir.apiBase', state.apiBase);
   window.location.href = `./business.html?businessId=${card.dataset.businessId}`;
 });

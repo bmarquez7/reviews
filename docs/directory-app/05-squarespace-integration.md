@@ -30,74 +30,18 @@
 
 <script>
 (function () {
-  var origin = 'https://grow-albania-reviews.netlify.app';
-  var wrap = document.getElementById('grow-albania-directory-wrap');
   var iframe = document.getElementById('grow-albania-directory-frame');
-  if (!wrap || !iframe) return;
-
-  var overlayActive = false;
-  var savedScrollY = 0;
-  var mobileQuery = window.matchMedia('(max-width: 920px)');
+  if (!iframe) return;
 
   function setFrameHeight(height) {
-    if (overlayActive && mobileQuery.matches) return;
     var next = Math.max(900, Number(height) || 0);
     iframe.style.height = next + 'px';
   }
 
-  function restoreInlineEmbed() {
-    overlayActive = false;
-    document.documentElement.style.overflow = '';
-    document.body.style.overflow = '';
-    wrap.style.position = '';
-    wrap.style.inset = '';
-    wrap.style.zIndex = '';
-    wrap.style.width = '';
-    wrap.style.maxWidth = '1400px';
-    wrap.style.height = '';
-    wrap.style.margin = '0 auto';
-    iframe.style.height = '';
-    iframe.style.minHeight = '1200px';
-    iframe.style.borderRadius = '12px';
-    window.scrollTo(0, savedScrollY || 0);
-  }
-
-  function enableMobileFullscreen() {
-    if (!mobileQuery.matches) return;
-    overlayActive = true;
-    savedScrollY = window.scrollY || window.pageYOffset || 0;
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.overflow = 'hidden';
-    wrap.style.position = 'fixed';
-    wrap.style.inset = '0';
-    wrap.style.zIndex = '2147483000';
-    wrap.style.width = '100vw';
-    wrap.style.maxWidth = '100vw';
-    wrap.style.height = '100dvh';
-    wrap.style.margin = '0';
-    iframe.style.height = '100dvh';
-    iframe.style.minHeight = '100dvh';
-    iframe.style.borderRadius = '0';
-    window.scrollTo(0, 0);
-  }
-
   window.addEventListener('message', function (event) {
-    if (event.origin !== origin) return;
+    if (event.origin !== 'https://grow-albania-reviews.netlify.app') return;
     var data = event.data || {};
-
-    if (data.type === 'directory:resize') {
-      setFrameHeight(data.height);
-      return;
-    }
-
-    if (data.type === 'directory:overlay-state') {
-      if (data.active) enableMobileFullscreen();
-      else restoreInlineEmbed();
-    }
-  });
-
-  window.addEventListener('resize', function () {
-    if (!mobileQuery.matches && overlayActive) restoreInlineEmbed();
+    if (data.type === 'directory:resize') setFrameHeight(data.height);
   });
 
   iframe.addEventListener('load', function () {
@@ -126,7 +70,7 @@
 - Admin panel on separate URL (`https://admin.example.com` or `/admin`).
 - Never embed admin in Squarespace.
 - Enforce server-side role checks for all admin APIs.
-- If fullscreen mobile modals are required, the parent embed script must cooperate. An iframe cannot visually escape its own bounds without the host page resizing or repositioning it.
+- In launcher mode, embedded search can redirect users into the full standalone Netlify app for deeper interactions instead of keeping business pages and lightboxes inside the iframe.
 
 ## Option B: Script widget injection (feasible, but less reliable)
 
