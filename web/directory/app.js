@@ -48,7 +48,7 @@ const state = {
   factors: Object.fromEntries(FACTORS.map(([key]) => [key, 4.5])),
   featuredPool: [],
   featuredTimer: null,
-  featuredRotateMs: 20000,
+  featuredRotateMs: 45000,
   featuredPageSize: 20,
   featuredMode: false
 };
@@ -60,6 +60,36 @@ const errMsg = (err) => err?.error?.message || 'Request failed';
 const authHeaders = () => (state.token ? { Authorization: `Bearer ${state.token}` } : {});
 
 const sanitizeImageUrl = (value) => safeUrl(value, { allowHttp: true, allowHttps: true });
+
+const featuredCardMarkup = (business) => {
+  const photo = sanitizeImageUrl((business?.media_urls || [])[0]);
+  const body = `
+    <div class="featured-card-body">
+      <div class="item-title">${escapeHtml(formatDisplayName(business?.name || 'Business'))}</div>
+      <div class="rating-row">${logoRatingMarkup(business?.scores?.weighted_overall_display)}<span class="item-sub">${formatScoreText(business?.scores?.weighted_overall_display)} / 5</span></div>
+      <div class="item-sub">Reviews: ${Number(business?.scores?.business_rating_count ?? 0)}</div>
+      <div class="item-sub">Locations: ${Number(business?.locations_count ?? 0)}</div>
+    </div>
+  `;
+
+  if (!photo) {
+    return `
+      <article class="item featured-card ${state.selectedBusiness?.id === business.id ? 'active' : ''}" data-business-id="${escapeAttr(business.id)}">
+        <div class="featured-card-media featured-card-placeholder"><span>No photo yet</span></div>
+        ${body}
+      </article>
+    `;
+  }
+
+  return `
+    <article class="item featured-card ${state.selectedBusiness?.id === business.id ? 'active' : ''}" data-business-id="${escapeAttr(business.id)}">
+      <div class="featured-card-media">
+        <img class="featured-card-image" src="${escapeAttr(photo)}" alt="${escapeAttr(formatDisplayName(business?.name || 'Business'))}" loading="lazy" />
+      </div>
+      ${body}
+    </article>
+  `;
+};
 
 const compactLocationLabel = (businessName, loc, index = 0) => {
   const city = String(loc?.city || '').trim();
@@ -365,15 +395,12 @@ const renderBusinesses = () => {
   const canBrowse = !!search || !!state.selectedCategoryId || !!state.alphaFilter || !isEmbedMode;
   if (!canBrowse) {
     if (state.featuredMode && state.businesses.length) {
-      $('businessesList').innerHTML = state.businesses
-        .map(
-          (b) =>
-            `<article class="item ${state.selectedBusiness?.id === b.id ? 'active' : ''}" data-business-id="${escapeAttr(b.id)}"><div class="item-title">${escapeHtml(formatDisplayName(b.name))}</div><div class="rating-row">${logoRatingMarkup(b.scores?.weighted_overall_display)}<span class="item-sub">${formatScoreText(b.scores?.weighted_overall_display)} / 5</span></div><div class="item-sub">Reviews: ${Number(b.scores?.business_rating_count ?? 0)}</div><div class="item-sub">Locations: ${Number(b.locations_count ?? 0)}</div></article>`
-        )
-        .join('');
-      $('businessPageInfo').textContent = `Showing 20 random places (rotates every 20s)`;
+      $('businessesList').innerHTML = state.businesses.map((b) => featuredCardMarkup(b)).join('');
+      $('businessesList').classList.add('featured-grid');
+      $('businessPageInfo').textContent = `Showing 20 random places (rotates every 45s)`;
     } else {
       $('businessesList').innerHTML = '<div class="muted">Loading featured places...</div>';
+      $('businessesList').classList.add('featured-grid');
       $('businessPageInfo').textContent = 'Loading featured places';
     }
     $('businessPrev').disabled = true;
@@ -382,6 +409,7 @@ const renderBusinesses = () => {
   }
 
   state.featuredMode = false;
+  $('businessesList').classList.remove('featured-grid');
 
   $('businessesList').innerHTML = !state.businesses.length
     ? '<div class="muted">No businesses found.</div>'

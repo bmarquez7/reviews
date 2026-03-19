@@ -138,7 +138,7 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
 
     const businessIds = (res.data ?? []).map((b) => b.id);
 
-    const [scoreRes, categoryRes, locationRes] = await Promise.all([
+    const [scoreRes, categoryRes, locationRes, businessMedia] = await Promise.all([
       businessIds.length
         ? supabaseAdmin
             .from('business_score_summary')
@@ -153,7 +153,14 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
         : Promise.resolve({ data: [], error: null }),
       businessIds.length
         ? supabaseAdmin.from('business_locations').select('id,business_id,country,region,city,status').in('business_id', businessIds)
-        : Promise.resolve({ data: [], error: null })
+        : Promise.resolve({ data: [], error: null }),
+      businessIds.length
+        ? listPublicMediaBatch(
+            BUSINESS_MEDIA_BUCKET,
+            businessIds.map((businessId) => `business/${businessId}/`),
+            1
+          )
+        : Promise.resolve(new Map())
     ]);
 
     if (scoreRes.error || categoryRes.error || locationRes.error) {
@@ -196,6 +203,7 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
         name: business.name,
         categories: categoriesByBusiness.get(business.id) ?? [],
         locations_count: (locationByBusiness.get(business.id) ?? []).length,
+        media_urls: businessMedia.get(`business/${business.id}/`) ?? [],
         scores: {
           weighted_overall_display: score?.weighted_overall_display ?? null,
           weighted_overall_raw: score?.weighted_overall_raw ?? null,

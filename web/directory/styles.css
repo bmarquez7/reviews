@@ -119,6 +119,40 @@ button:hover { filter: brightness(1.05); }
 .item-sub { color: var(--muted); font-size: 0.9rem; }
 .muted { color: var(--muted); }
 
+.featured-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.featured-card {
+  padding: 0;
+  overflow: hidden;
+  display: grid;
+  gap: 0;
+}
+
+.featured-card-media {
+  aspect-ratio: 4 / 3;
+  background: #eef2f8;
+}
+
+.featured-card-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.featured-card-body {
+  padding: 0.75rem;
+}
+
+.featured-card-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .rating-row {
   display: flex;
   align-items: center;
@@ -410,6 +444,7 @@ button:hover { filter: brightness(1.05); }
   .topbar { flex-direction: column; align-items: stretch; }
   .api-base-wrap { flex-wrap: wrap; }
   .api-base-wrap input { min-width: 0; width: 100%; }
+  .featured-card-media { aspect-ratio: 4 / 5; }
 }
 .review-toolbar {
   margin-top: 0.6rem;
