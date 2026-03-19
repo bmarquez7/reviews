@@ -141,8 +141,11 @@ export const installEmbedResize = () => {
 
   let frame = 0;
   let lastHeight = 0;
+  let overlayFrame = 0;
+  let lastOverlayActive = null;
   let resizeObserver = null;
   let mutationObserver = null;
+  let overlayObserver = null;
 
   const measure = () =>
     Math.max(
@@ -167,13 +170,38 @@ export const installEmbedResize = () => {
     );
   };
 
+  const hasVisibleOverlay = () =>
+    Boolean(document.querySelector('.overlay:not(.hidden), .page-loading-overlay:not(.hidden)'));
+
+  const postOverlayState = () => {
+    overlayFrame = 0;
+    const active = hasVisibleOverlay();
+    if (active === lastOverlayActive) return;
+    lastOverlayActive = active;
+    window.parent.postMessage(
+      {
+        type: 'directory:overlay-state',
+        active,
+        path: window.location.pathname
+      },
+      '*'
+    );
+  };
+
   const schedule = () => {
     if (frame) return;
     frame = window.requestAnimationFrame(postHeight);
   };
 
+  const scheduleOverlay = () => {
+    if (overlayFrame) return;
+    overlayFrame = window.requestAnimationFrame(postOverlayState);
+  };
+
   window.addEventListener('load', schedule);
   window.addEventListener('resize', schedule);
+  window.addEventListener('load', scheduleOverlay);
+  window.addEventListener('resize', scheduleOverlay);
 
   if (document.body && 'ResizeObserver' in window) {
     resizeObserver = new ResizeObserver(schedule);
@@ -189,17 +217,33 @@ export const installEmbedResize = () => {
       attributes: true,
       characterData: true
     });
+
+    overlayObserver = new MutationObserver(scheduleOverlay);
+    overlayObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style']
+    });
   }
 
-  [100, 350, 800, 1500].forEach((delay) => window.setTimeout(schedule, delay));
+  [100, 350, 800, 1500].forEach((delay) => {
+    window.setTimeout(schedule, delay);
+    window.setTimeout(scheduleOverlay, delay);
+  });
   schedule();
+  scheduleOverlay();
 
   return () => {
     window.removeEventListener('load', schedule);
     window.removeEventListener('resize', schedule);
+    window.removeEventListener('load', scheduleOverlay);
+    window.removeEventListener('resize', scheduleOverlay);
     if (frame) window.cancelAnimationFrame(frame);
+    if (overlayFrame) window.cancelAnimationFrame(overlayFrame);
     resizeObserver?.disconnect();
     mutationObserver?.disconnect();
+    overlayObserver?.disconnect();
   };
 };
 
