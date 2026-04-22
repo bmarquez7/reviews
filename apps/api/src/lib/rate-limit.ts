@@ -51,9 +51,13 @@ const RULES: RateLimitRule[] = [
 ];
 
 const getClientKey = (request: FastifyRequest) => {
-  const forwardedFor = request.headers['x-forwarded-for'];
-  if (typeof forwardedFor === 'string' && forwardedFor.trim()) {
-    return forwardedFor.split(',')[0].trim();
+  const cfConnectingIp = request.headers['cf-connecting-ip'];
+  if (typeof cfConnectingIp === 'string' && cfConnectingIp.trim()) {
+    return cfConnectingIp.trim();
+  }
+  const realIp = request.headers['x-real-ip'];
+  if (typeof realIp === 'string' && realIp.trim()) {
+    return realIp.trim();
   }
   return request.ip || request.socket.remoteAddress || 'unknown';
 };

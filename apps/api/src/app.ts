@@ -17,7 +17,10 @@ import { adminRoutes } from './routes/admin.js';
 import { mediaRoutes } from './routes/media.js';
 
 export const buildApp = () => {
-  const app = Fastify({ logger: true });
+  const app = Fastify({
+    logger: true,
+    trustProxy: env.NODE_ENV === 'production'
+  });
   registerRateLimit(app);
 
   const allowedOrigins = env.APP_ORIGIN.split(',')
@@ -50,27 +53,29 @@ export const buildApp = () => {
     }
   });
 
-  app.register(swagger, {
-    openapi: {
-      info: {
-        title: 'Directory API',
-        version: '0.1.0'
-      },
-      components: {
-        securitySchemes: {
-          bearerAuth: {
-            type: 'http',
-            scheme: 'bearer',
-            bearerFormat: 'JWT'
+  if (env.ENABLE_SWAGGER) {
+    app.register(swagger, {
+      openapi: {
+        info: {
+          title: 'Directory API',
+          version: '0.1.0'
+        },
+        components: {
+          securitySchemes: {
+            bearerAuth: {
+              type: 'http',
+              scheme: 'bearer',
+              bearerFormat: 'JWT'
+            }
           }
         }
       }
-    }
-  });
+    });
 
-  app.register(swaggerUi, {
-    routePrefix: '/docs'
-  });
+    app.register(swaggerUi, {
+      routePrefix: '/docs'
+    });
+  }
 
   app.setErrorHandler((error, _request, reply) => {
     app.log.error(error);
@@ -83,7 +88,7 @@ export const buildApp = () => {
       ok: true,
       service: 'directory-api',
       health: '/v1/health',
-      docs: '/docs'
+      docs: env.ENABLE_SWAGGER ? '/docs' : null
     }
   }));
 

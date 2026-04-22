@@ -1,0 +1,17 @@
+# Local env files
+.env
+.env.*
+!.env.example
+apps/api/.env
+scripts/.env
+
+# Local dependencies
+node_modules/
+apps/api/node_modules/
+scripts/node_modules/
+
+# Local platform folders
+.netlify/
+
+# OS files
+.DS_Store

@@ -1,9 +1,11 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { env } from './lib/env.js';
 import { toErrorResponse } from './lib/http-errors.js';
+import { registerRateLimit } from './lib/rate-limit.js';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { i18nRoutes } from './routes/i18n.js';
@@ -12,27 +14,75 @@ import { directoryRoutes } from './routes/directory.js';
 import { ratingRoutes } from './routes/ratings.js';
 import { businessRoutes } from './routes/business.js';
 import { adminRoutes } from './routes/admin.js';
+import { mediaRoutes } from './routes/media.js';
 export const buildApp = () => {
-    const app = Fastify({ logger: true });
-    app.register(cors, {
-        origin: [env.APP_ORIGIN],
-        credentials: true
+    const app = Fastify({
+        logger: true,
+        trustProxy: env.NODE_ENV === 'production'
     });
-    app.register(swagger, {
-        openapi: {
-            info: {
-                title: 'Directory API',
-                version: '0.1.0'
-            }
+    registerRateLimit(app);
+    const allowedOrigins = env.APP_ORIGIN.split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .map((value) => {
+        try {
+            return new URL(value).origin;
+        }
+        catch {
+            return value;
         }
     });
-    app.register(swaggerUi, {
-        routePrefix: '/docs'
+    app.register(cors, {
+        origin: (origin, cb) => {
+            if (!origin) {
+                cb(null, true);
+                return;
+            }
+            cb(null, allowedOrigins.includes(origin));
+        },
+        credentials: true
     });
+    app.register(multipart, {
+        limits: {
+            fileSize: 8 * 1024 * 1024,
+            files: 4
+        }
+    });
+    if (env.ENABLE_SWAGGER) {
+        app.register(swagger, {
+            openapi: {
+                info: {
+                    title: 'Directory API',
+                    version: '0.1.0'
+                },
+                components: {
+                    securitySchemes: {
+                        bearerAuth: {
+                            type: 'http',
+                            scheme: 'bearer',
+                            bearerFormat: 'JWT'
+                        }
+                    }
+                }
+            }
+        });
+        app.register(swaggerUi, {
+            routePrefix: '/docs'
+        });
+    }
     app.setErrorHandler((error, _request, reply) => {
+        app.log.error(error);
         const shaped = toErrorResponse(error);
         void reply.code(shaped.statusCode).send(shaped.body);
     });
+    app.get('/', async () => ({
+        data: {
+            ok: true,
+            service: 'directory-api',
+            health: '/v1/health',
+            docs: env.ENABLE_SWAGGER ? '/docs' : null
+        }
+    }));
     app.register(healthRoutes, { prefix: '/v1' });
     app.register(authRoutes, { prefix: '/v1' });
     app.register(i18nRoutes, { prefix: '/v1' });
@@ -41,5 +91,6 @@ export const buildApp = () => {
     app.register(ratingRoutes, { prefix: '/v1' });
     app.register(businessRoutes, { prefix: '/v1' });
     app.register(adminRoutes, { prefix: '/v1' });
+    app.register(mediaRoutes, { prefix: '/v1' });
     return app;
 };

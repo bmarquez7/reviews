@@ -18,6 +18,10 @@ services:
         value: https://grow-albania-reviews.netlify.app
       - key: DEFAULT_POLICIES_VERSION
         value: 2026-02-17
+      - key: ENABLE_SWAGGER
+        value: "false"
+      - key: OWNER_EMAILS
+        value: brandon@elsewhere-co.com
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY

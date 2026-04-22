@@ -10,7 +10,16 @@ const EnvSchema = z.object({
   SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   DEFAULT_POLICIES_VERSION: z.string().min(1).default('2026-02-17'),
-  OWNER_EMAILS: z.string().default('brandon@elsewhere-co.com')
+  OWNER_EMAILS: z.string().default(''),
+  ENABLE_SWAGGER: z.enum(['true', 'false']).optional()
 });
 
-export const env = EnvSchema.parse(process.env);
+const parsedEnv = EnvSchema.parse(process.env);
+
+export const env = {
+  ...parsedEnv,
+  ENABLE_SWAGGER:
+    parsedEnv.ENABLE_SWAGGER == null
+      ? parsedEnv.NODE_ENV !== 'production'
+      : parsedEnv.ENABLE_SWAGGER === 'true'
+} as const;
